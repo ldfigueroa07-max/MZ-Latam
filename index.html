@@ -5835,4 +5835,9 @@ function seedVillaDelParque() {
     renderTopbarUser();
     // Show picker if no user selected
     if (!currentUser) {
-        setTimeout((
+        setTimeout(() => showUserPicker(false), 150);
+    }
+})();
+</script>
+</body>
+</html>
