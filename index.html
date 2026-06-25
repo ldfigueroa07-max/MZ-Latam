@@ -1141,7 +1141,7 @@ function vDashboard() {
     const mergedCur  = obrasByMonth.map((v,i) => v > 0 ? v : (histCur[i]||0));
     const mergedPrev = histPrev.slice();
 
-    const totalUSD   = mergedCur.reduce((s,v)=>s+v,0);
+    const totalUSD   = stMap.aprobado.reduce((s,p)=>s+(p.totalUSD||0),0);
     const totalARS   = stMap.aprobado.reduce((s,p)=>s+(p.totalARS||0),0);
     const prevTotalUSD = mergedPrev.reduce((s,v)=>s+v,0);
     const growthUSD  = prevTotalUSD > 0 ? ((totalUSD - prevTotalUSD) / prevTotalUSD * 100).toFixed(1) : null;
@@ -1434,7 +1434,7 @@ function dashBuildChart() {
             scales: {
                 x: { grid: { display: false }, ticks: { font: { size: 13, weight: '600' }, color: '#333' }, border: { display: false } },
                 y: { grid: { color: 'rgba(0,0,0,.05)' }, border: { display: false },
-                     ticks: { font: { size: 12, weight: '500' }, color: '#555', callback: v => v === 0 ? '0' : (v>=1000000 ? '$ '+(v/1000000).toFixed(1)+'M' : '$ '+(v/1000).toFixed(0)+'k') }}
+                     ticks: { font: { size: 12, weight: '500' }, color: '#555', callback: v => v === 0 ? '0' : (v>=1000000000 ? '$ '+(v/1000000000).toFixed(1)+'B' : v>=1000000 ? '$ '+(v/1000000).toFixed(0)+'M' : '$ '+(v/1000).toFixed(0)+'k') }}
             }
         }
     });
@@ -5834,9 +5834,4 @@ function seedVillaDelParque() {
     renderTopbarUser();
     // Show picker if no user selected
     if (!currentUser) {
-        setTimeout(() => showUserPicker(false), 150);
-    }
-})();
-</script>
-</body>
-</html>
+        setTimeout((
