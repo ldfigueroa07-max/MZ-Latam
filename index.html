@@ -1778,8 +1778,8 @@ function vEstimador() {
             <div class="card">
                 <div class="card-bd">
                     <div style="display:flex;gap:8px;margin-bottom:8px">
-                        <button class="btn btn-secondary" style="flex:1" onclick="guardar('abierto')">${editId ? 'Guardar cambios' : 'Guardar como Abierto'}</button>
-                        <button class="btn btn-success"   style="flex:1" onclick="guardar('${editId ? (plist.find(x=>x.id===editId)?.status||'abierto') : 'presentado'}')">${editId ? '💾 Guardar' : '✔ Presentado'}</button>
+                        <button class="btn btn-secondary" style="flex:1" onclick="${editId ? "guardar('abierto')" : "nav('historial')"}">${editId ? 'Guardar cambios' : 'Cancelar'}</button>
+                        <button class="btn btn-success"   style="flex:1" onclick="guardar('${editId ? (plist.find(x=>x.id===editId)?.status||'abierto') : 'presentado'}')">${editId ? '💾 Guardar' : '💾 Guardar'}</button>
                     </div>
                     ${editId ? `<button class="btn btn-secondary" style="width:100%" onclick="nav('detalle','${editId}')">Cancelar edición</button>` : ''}
                 </div>
