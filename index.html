@@ -5024,6 +5024,17 @@ function detectColumns(rows) {
 }
 
 // ── Modal: subir lista de precios ─────────────────
+
+// ── Parser numérico formato ARS (3.561,86 → 3561.86) ─
+function parseArPrice(val) {
+    if (typeof val === 'number') return val;
+    const s = String(val).replace(/[$\s]/g, '').trim();
+    if (!s) return 0;
+    // Formato AR: punto=miles, coma=decimal → "3.561,86"
+    if (s.includes(',')) return parseFloat(s.replace(/\./g,'').replace(',','.')) || 0;
+    // Formato numérico estándar
+    return parseFloat(s.replace(/,/g,'')) || 0;
+}
 function showUploadPriceListModal(supplierId) {
     const s = suppliers.find(x => x.id === supplierId);
     if (!s) return;
@@ -5109,7 +5120,7 @@ function renderPlPreview(rows, map, headers) {
         const desc  = map.descCol  >= 0 ? r[map.descCol]  : '';
         const unit  = map.unitCol  >= 0 ? r[map.unitCol]  : '';
         const price = map.priceCol >= 0 ? r[map.priceCol] : '';
-        const priceNum = parseFloat(String(price).replace(/[.,\s$]/g,'').replace(',','.'));
+        const priceNum = parseArPrice(price);
         return `<tr style="border-bottom:1px solid #f0f0f0;${ri%2===0?'background:#fafafa':''}">
             <td style="padding:7px 10px;font-size:13px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(String(desc))}</td>
             <td style="padding:7px 10px;font-size:13px;text-align:center;color:#666">${esc(String(unit))}</td>
@@ -5169,7 +5180,7 @@ function plUpdatePreview() {
         const desc  = descCol  >= 0 ? r[descCol]  : '';
         const unit  = unitCol  >= 0 ? r[unitCol]  : '';
         const price = priceCol >= 0 ? r[priceCol] : '';
-        const priceNum = parseFloat(String(price).replace(/[.,\s$]/g,'').replace(',','.'));
+        const priceNum = parseArPrice(price);
         return `<tr style="border-bottom:1px solid #f0f0f0;${ri%2===0?'background:#fafafa':''}">
             <td style="padding:7px 10px;font-size:13px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(String(desc))}</td>
             <td style="padding:7px 10px;font-size:13px;text-align:center;color:#666">${esc(String(unit))}</td>
@@ -5190,8 +5201,8 @@ function plSaveList(supplierId) {
     const items = rows.slice(1).reduce((acc, r) => {
         const desc  = descCol  >= 0 ? String(r[descCol] || '').trim() : '';
         const unit  = unitCol  >= 0 ? String(r[unitCol] || '').trim() : 'gl';
-        const rawP  = priceCol >= 0 ? String(r[priceCol] || '').replace(/[.,\s$]/g,'') : '';
-        const price = parseFloat(rawP) || 0;
+        const rawP  = priceCol >= 0 ? r[priceCol] : '';
+        const price = parseArPrice(rawP);
         if (desc && price > 0) acc.push({ desc, unit: unit||'gl', price });
         return acc;
     }, []);
