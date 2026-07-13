@@ -3446,30 +3446,7 @@ function vConfig() {
     return `
     <div class="page-grid">
         <div>
-            <div class="card">
-                <div class="card-hd">
-                    <span class="card-title">Módulos de Costo</span>
-                    <span class="card-sub">Nombre y tarifa base USD/m²</span>
-                </div>
-                <div class="card-bd" style="display:flex;flex-direction:column;gap:8px">
-                    <div style="display:flex;gap:10px;padding:0 12px;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:#bbb">
-                        <div style="width:36px">Color</div>
-                        <div style="flex:1">Nombre del módulo</div>
-                        <div style="width:130px;text-align:right">Tarifa base (USD/m²)</div>
-                        <div style="width:28px"></div>
-                    </div>
-                    <div id="cfg-mod-list">
-                        ${cfg.modules.map((m,i) => cfgModRow(m, i)).join('')}
-                    </div>
-                    <button class="btn btn-secondary btn-sm" style="align-self:flex-start;margin-top:4px" onclick="addCfgModule()">
-                        + Agregar módulo
-                    </button>
-                    <div style="padding:10px 12px;border-top:1px solid var(--border);font-size:15px;display:flex;justify-content:space-between;margin-top:4px">
-                        <span style="color:#888">Total base (todos los módulos):</span>
-                        <strong>USD ${cfg.modules.reduce((s,m)=>s+m.costUSD,0)}/m²</strong>
-                    </div>
-                </div>
-            </div>
+            ${vPlantillaCard()}
         </div>
         <div>
             <!-- Equipo -->
@@ -3502,10 +3479,6 @@ function vConfig() {
                 </div>
             </div>
         </div>
-    </div>
-    <!-- Plantilla de Rubros — full width -->
-    <div style="margin-top:24px">
-        ${vPlantillaCard()}
     </div>`;
 }
 
@@ -3684,8 +3657,8 @@ function vPlantillaCard() {
     <div class="card">
         <div class="card-hd" style="flex-wrap:wrap;gap:10px">
             <div>
-                <span class="card-title">📋 Plantilla de Rubros</span>
-                <span class="card-sub">${totalCats} categorías · ${totalItems} ítems — base para nuevos presupuestos</span>
+                <span class="card-title">Módulos & Rubros</span>
+                <span class="card-sub">${totalCats} rubros · ${totalItems} ítems · USD ${plantilla.reduce((s,c)=>s+(c.costUSD||0),0)}/m² total</span>
             </div>
             <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
                 <button class="btn btn-success btn-sm" onclick="savePlantillaForm()">💾 Guardar cambios</button>
@@ -3696,6 +3669,10 @@ function vPlantillaCard() {
         <div class="card-bd" style="padding:0">
             <div id="plt-accordion">
                 ${plantilla.map((cat, ci) => plantillaCatRow(cat, ci)).join('')}
+            </div>
+            <div style="padding:10px 18px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:14px">
+                <span style="color:#888">Total base (suma USD/m² todos los rubros):</span>
+                <strong style="color:#131313">USD ${plantilla.reduce((s,c)=>s+(c.costUSD||0),0)}/m²</strong>
             </div>
         </div>
     </div>`;
@@ -3713,8 +3690,9 @@ function plantillaCatRow(cat, ci) {
              style="display:flex;align-items:center;gap:10px;padding:11px 18px;cursor:pointer;user-select:none;background:${isOpen?'#fafafa':'#fff'};transition:background .15s">
             <span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;background:${palette.bg};color:${palette.text};font-size:12px;font-weight:800;flex-shrink:0">${esc(cat.id)}</span>
             <span style="flex:1;font-size:15px;font-weight:600;color:#1a1a1a">${esc(cat.nombre)}</span>
-            ${hasProveedor ? `<span style="font-size:12px;color:#888;background:#f3f4f6;padding:2px 8px;border-radius:20px">${esc(cat.proveedor)}</span>` : ''}
-            <span style="font-size:13px;color:#bbb;min-width:60px;text-align:right">${totalItems} ítem${totalItems!==1?'s':''}</span>
+            ${hasProveedor ? `<span style="font-size:12px;color:#888;background:#f3f4f6;padding:2px 8px;border-radius:20px;white-space:nowrap">${esc(cat.proveedor)}</span>` : ''}
+            ${(cat.costUSD||0)>0 ? `<span style="font-size:12px;font-weight:700;color:#16a34a;background:#f0fdf4;padding:2px 8px;border-radius:20px;white-space:nowrap">USD ${cat.costUSD}/m²</span>` : ''}
+            <span style="font-size:13px;color:#bbb;min-width:52px;text-align:right">${totalItems} ítem${totalItems!==1?'s':''}</span>
             <span style="font-size:16px;color:#ccc;transition:transform .2s;transform:rotate(${isOpen?90:0}deg)">›</span>
         </div>
         <!-- Expanded content -->
@@ -3722,9 +3700,17 @@ function plantillaCatRow(cat, ci) {
             <!-- Category meta row -->
             <div style="display:flex;gap:10px;align-items:flex-end;padding:10px 18px 8px;background:#fafafa;border-top:1px solid #f0f0f0;flex-wrap:wrap">
                 <div style="flex:2;min-width:180px">
-                    <label style="font-size:12px;color:#aaa;font-weight:600;text-transform:uppercase;letter-spacing:.7px">Nombre de la categoría</label>
+                    <label style="font-size:12px;color:#aaa;font-weight:600;text-transform:uppercase;letter-spacing:.7px">Nombre del rubro</label>
                     <input class="finput" id="plt-cn-${ci}" type="text" value="${esc(cat.nombre)}"
-                        style="margin-top:4px;font-size:14px;font-weight:600" placeholder="Nombre de la categoría">
+                        style="margin-top:4px;font-size:14px;font-weight:600" placeholder="Nombre del rubro">
+                </div>
+                <div style="width:120px;flex-shrink:0">
+                    <label style="font-size:12px;color:#aaa;font-weight:600;text-transform:uppercase;letter-spacing:.7px">USD / m²</label>
+                    <div style="display:flex;align-items:center;gap:4px;margin-top:4px">
+                        <input class="finput" id="plt-cusd-${ci}" type="number" min="0" step="any" value="${cat.costUSD||0}"
+                            style="font-size:14px;text-align:right;width:72px" placeholder="0">
+                        <span style="font-size:12px;color:#aaa;white-space:nowrap">/m²</span>
+                    </div>
                 </div>
                 <div style="flex:1;min-width:160px">
                     <label style="font-size:12px;color:#aaa;font-weight:600;text-transform:uppercase;letter-spacing:.7px">Proveedor por defecto</label>
@@ -3991,9 +3977,10 @@ function togglePlantillaCat(ci) {
 function savePlantillaForm() {
     plantilla.forEach((cat, ci) => {
         const nameEl = document.getElementById('plt-cn-'+ci);
-        const provEl = document.getElementById('plt-cp-'+ci);
+        const provEl = document.getElementById('plt-cp-'+ci);  // legacy (unused, kept for safety)
+        const usdEl  = document.getElementById('plt-cusd-'+ci);
         if (nameEl) cat.nombre    = nameEl.value.trim() || cat.nombre;
-        if (provEl) cat.proveedor = provEl.value.trim();
+        if (usdEl)  cat.costUSD   = parseFloat(usdEl.value) || 0;
         cat.items.forEach((item, ii) => {
             const descEl = document.getElementById('plt-d-'+ci+'-'+ii);
             const qEl    = document.getElementById('plt-q-'+ci+'-'+ii);
