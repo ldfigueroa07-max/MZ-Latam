@@ -980,19 +980,72 @@ const MAX_FILE_B = 3 * 1024 * 1024; // 3 MB limit per file
 let sesFiles      = {};   // { modId: [{id,name,size,type,dataUrl,isImg,isPdf,isTxt,isXls}] }
 let sesNotes      = {};   // { modId: string } — free-text notes per module
 let sesProvs      = {};   // { modId: [{id,supplierId,supplierName,estado,monto,moneda,plazo,nota}] }
+let sesModules    = [];   // active modules for current session (replaces cfg.modules in estimador)
 let sesLogo   = null; // { name, dataUrl, isImg } — plano/logo del cliente
 
 function initSes() {
+    sesModules = [];
     modOn = {}; modExpand = {}; sesItems = {}; sesFiles = {}; sesNotes = {}; sesProvs = {}; sesLogo = null;
     sesCurrency = 'USD';
-    cfg.modules.forEach(m => {
-        modOn[m.id]     = true;
-        modExpand[m.id] = false;
-        sesItems[m.id]  = [];
-        sesFiles[m.id]  = [];
-        sesNotes[m.id]  = '';
-        sesProvs[m.id]  = [];
-    });
+}
+// Add a rubro from plantilla to the current session
+function addRubroToSes(catId) {
+    if (sesModules.find(m => m.id === catId)) { toast('Ya está agregado'); return; }
+    const cat = plantilla.find(c => c.id === catId);
+    if (!cat) return;
+    const m = { id: cat.id, name: cat.nombre, emoji: '📦', costUSD: cat.costUSD || 0 };
+    sesModules.push(m);
+    modOn[m.id]     = true;
+    modExpand[m.id] = false;
+    sesItems[m.id]  = [];
+    sesFiles[m.id]  = [];
+    sesNotes[m.id]  = '';
+    sesProvs[m.id]  = [];
+    // Re-render picker + mod-list
+    const ml = document.getElementById('mod-list');
+    if (ml) ml.innerHTML = sesModules.map(mod => vModRow(mod)).join('');
+    _refreshPickerChips();
+    calcEst();
+}
+function removeRubroFromSes(modId) {
+    sesModules = sesModules.filter(m => m.id !== modId);
+    delete modOn[modId]; delete modExpand[modId];
+    delete sesItems[modId]; delete sesFiles[modId];
+    delete sesNotes[modId]; delete sesProvs[modId];
+    const ml = document.getElementById('mod-list');
+    if (ml) ml.innerHTML = sesModules.length
+        ? sesModules.map(mod => vModRow(mod)).join('')
+        : '<div style="color:#bbb;font-size:14px;text-align:center;padding:24px">Agregá rubros usando el buscador de arriba.</div>';
+    _refreshPickerChips();
+    calcEst();
+}
+function _refreshPickerChips() {
+    // Refresh the picker chip grid so added/not-added state is correct
+    const grid = document.getElementById('rubro-picker-grid');
+    if (grid) grid.innerHTML = _rubroChips(document.getElementById('rubro-search')?.value || '');
+}
+function _rubroChips(filter) {
+    const q = (filter || '').toLowerCase().trim();
+    const cats = q ? plantilla.filter(c => c.nombre.toLowerCase().includes(q) || c.id.includes(q)) : plantilla;
+    if (!cats.length) return '<div style="color:#bbb;font-size:13px;padding:8px 4px">Sin resultados.</div>';
+    return cats.map(cat => {
+        const pal = MOD_PALETTE[plantilla.indexOf(cat) % MOD_PALETTE.length];
+        const added = !!sesModules.find(m => m.id === cat.id);
+        return added
+            ? `<div style="display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:20px;background:#f0fdf4;border:1px solid #bbf7d0;opacity:.7">
+                <span style="font-size:10px;font-weight:800;color:${pal.text};background:${pal.bg};padding:1px 5px;border-radius:4px">${cat.id}</span>
+                <span style="font-size:13px;color:#16a34a;font-weight:500">${esc(cat.nombre)}</span>
+                <button onclick="removeRubroFromSes('${cat.id}')" style="background:none;border:none;color:#86efac;cursor:pointer;font-size:14px;padding:0 2px;line-height:1" title="Quitar">✕</button>
+              </div>`
+            : `<div onclick="addRubroToSes('${cat.id}')"
+                style="display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:20px;background:#f8f8f8;border:1px solid #e5e5e5;cursor:pointer;transition:all .15s"
+                onmouseover="this.style.background='#f3f4f6';this.style.borderColor='#d1d5db'"
+                onmouseout="this.style.background='#f8f8f8';this.style.borderColor='#e5e5e5'">
+                <span style="font-size:10px;font-weight:800;color:${pal.text};background:${pal.bg};padding:1px 5px;border-radius:4px">${cat.id}</span>
+                <span style="font-size:13px;color:#444">${esc(cat.nombre)}</span>
+                <span style="color:#aaa;font-size:14px;margin-left:auto">＋</span>
+              </div>`;
+    }).join('');
 }
 initSes();
 
@@ -1077,14 +1130,18 @@ const MOD_PALETTE = [
 ];
 
 function modColor(modId, fallbackIdx) {
-    const idx = cfg.modules.findIndex(m => m.id === modId);
+    // Look in sesModules first (estimador context), then plantilla, then cfg.modules
+    let idx = sesModules.findIndex(m => m.id === modId);
+    if (idx < 0) idx = plantilla.findIndex(c => c.id === modId);
+    if (idx < 0) idx = cfg.modules.findIndex(m => m.id === modId);
     return MOD_PALETTE[(idx >= 0 ? idx : (fallbackIdx ?? 0)) % MOD_PALETTE.length];
 }
 
 // Returns the colored badge HTML (square with initial)
 // fallbackName / fallbackIdx allow custom modules (not in cfg) to render correctly
 function modBadge(modId, size, fallbackName, fallbackIdx) {
-    let m = cfg.modules.find(x => x.id === modId);
+    let m = sesModules.find(x => x.id === modId);
+    if (!m) m = cfg.modules.find(x => x.id === modId);
     if (!m && fallbackName !== undefined) m = { name: fallbackName };
     if (!m) return '';
     const c = modColor(modId, fallbackIdx);
@@ -1103,7 +1160,7 @@ function modTotal(modId, metros) {
     if (items.length > 0) {
         return items.reduce((s,i) => s + (parseFloat(i.qty)||0) * (parseFloat(i.priceUSD)||0), 0);
     }
-    const m = cfg.modules.find(x => x.id === modId);
+    const m = sesModules.find(x => x.id === modId) || cfg.modules.find(x => x.id === modId);
     return (m?.costUSD || 0) * (parseFloat(metros) || 0);
 }
 
@@ -1113,7 +1170,7 @@ function modMode(modId) {
 }
 
 function grandTotal(metros) {
-    return cfg.modules.reduce((s,m) => s + modTotal(m.id, metros), 0);
+    return sesModules.reduce((s,m) => s + modTotal(m.id, metros), 0);
 }
 
 // ═══════════════════════════════════════════════════
@@ -1741,15 +1798,34 @@ function vEstimador() {
                 </div>
             </div>
 
-            <!-- Módulos -->
+            <!-- Rubros del presupuesto -->
             <div class="card" id="est-modulos">
-                <div class="card-hd">
-                    <span class="card-title">Módulos de Costo</span>
-                    <span class="card-sub">Expandí cada módulo para agregar ítems</span>
+                <div class="card-hd" style="flex-wrap:wrap;gap:8px">
+                    <div>
+                        <span class="card-title">Rubros del presupuesto</span>
+                        <span class="card-sub">Seleccioná los rubros a incluir y expandí para agregar ítems</span>
+                    </div>
                 </div>
+                <!-- Rubro picker -->
+                <div style="padding:12px 14px 8px;border-bottom:1px solid #f5f5f5;background:#fafafa">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                        <input class="finput" id="rubro-search" type="text"
+                            placeholder="🔍 Buscar rubro de la plantilla…"
+                            style="flex:1;font-size:14px"
+                            oninput="_refreshPickerChips()">
+                        <span style="font-size:12px;color:#bbb;white-space:nowrap">${plantilla.length} disponibles</span>
+                    </div>
+                    <div id="rubro-picker-grid" style="display:flex;flex-wrap:wrap;gap:6px;max-height:200px;overflow-y:auto">
+                        ${_rubroChips('')}
+                    </div>
+                </div>
+                <!-- Selected modules -->
                 <div class="card-bd" style="padding:14px">
                     <div class="mod-list" id="mod-list">
-                        ${cfg.modules.map(m => vModRow(m)).join('')}
+                        ${sesModules.length
+                            ? sesModules.map(m => vModRow(m)).join('')
+                            : '<div style="color:#bbb;font-size:14px;text-align:center;padding:24px">Agregá rubros usando el buscador de arriba.</div>'
+                        }
                     </div>
                 </div>
             </div>
@@ -2369,7 +2445,7 @@ function calcEst() {
     const total  = grandTotal(m2val);
 
     // Refresh all module rows
-    cfg.modules.forEach(m => refreshModRow(m.id));
+    sesModules.forEach(m => refreshModRow(m.id));
 
     const usdEl  = document.getElementById('r-usd');
     const rngEl  = document.getElementById('r-rng-usd');
@@ -2404,7 +2480,7 @@ function calcEst() {
 }
 
 function bkHTML(m2val, total) {
-    return cfg.modules
+    return sesModules
         .filter(m => modOn[m.id] !== false)
         .map(m => {
             const v   = modTotal(m.id, m2val);
@@ -2460,6 +2536,13 @@ function prefill() {
 
     // Restore module state
     if (p.modules) {
+        // Rebuild sesModules from saved presupuesto modules
+        sesModules = p.modules.map(pm => ({
+            id:      pm.id,
+            name:    pm.name || pm.id,
+            emoji:   pm.emoji || '📦',
+            costUSD: pm.costUSD || 0,
+        }));
         p.modules.forEach(pm => {
             modOn[pm.id]    = pm.on !== false;
             sesItems[pm.id] = (pm.items  || []).map(i => ({ ...i, id: i.id || uid() }));
@@ -2467,10 +2550,12 @@ function prefill() {
             sesNotes[pm.id] = pm.notes   || '';
             sesProvs[pm.id] = (pm.proveedores || []).map(p => ({ ...p, id: p.id || uid() }));
         });
-        // Re-render module list (includes notes textareas)
-        document.getElementById('mod-list').innerHTML = cfg.modules.map(m => vModRow(m)).join('');
+        // Re-render module list + picker
+        const ml = document.getElementById('mod-list');
+        if (ml) ml.innerHTML = sesModules.map(m => vModRow(m)).join('');
+        _refreshPickerChips();
         // Restore populated styling on notes textareas
-        cfg.modules.forEach(m => {
+        sesModules.forEach(m => {
             if (sesNotes[m.id]) {
                 const ta = document.getElementById(`mn-${m.id}`);
                 if (ta) { ta.classList.add('populated'); ta.style.height = Math.min(ta.scrollHeight, 280) + 'px'; }
@@ -2545,14 +2630,14 @@ function guardar(status) {
     if (!cliente)  { toast('⚠️ Completá el nombre del cliente');  return; }
     if (!proyecto) { toast('⚠️ Completá el nombre del proyecto'); return; }
 
-    const hasItems = cfg.modules.some(m => (sesItems[m.id]||[]).length > 0);
+    const hasItems = sesModules.some(m => (sesItems[m.id]||[]).length > 0);
     if (metros <= 0 && !hasItems) {
         toast('⚠️ Ingresá los m² o agregá ítems en algún módulo');
         return;
     }
 
     const mg  = cfg.margen / 100;
-    const mods = cfg.modules.map(m => ({
+    const mods = sesModules.map(m => ({
         ...m,
         on:          modOn[m.id] !== false,
         items:       JSON.parse(JSON.stringify(sesItems[m.id] || [])),
