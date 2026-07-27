@@ -951,7 +951,7 @@ let sesItems  = {};   // { modId: [{id,desc,qty,unit,priceUSD}] }
 const UNITS   = ['m²','m³','ml','un','hs','gl','kg','lote'];
 
 // ─── Moneda base del presupuesto ───
-let sesCurrency = 'USD';  // 'USD' | 'ARS'
+let sesCurrency = 'ARS';  // 'USD' | 'ARS'
 function isModeARS()    { return sesCurrency === 'ARS'; }
 function fPri(n)        { return isModeARS() ? fARS(n) : fUSD(n); }
 function fSec(n, tc)    { return isModeARS() ? fUSD(n / (tc||1)) : fARS(n * (tc||1)); }
@@ -986,18 +986,30 @@ let sesLogo   = null; // { name, dataUrl, isImg } — plano/logo del cliente
 function initSes() {
     sesModules = [];
     modOn = {}; modExpand = {}; sesItems = {}; sesFiles = {}; sesNotes = {}; sesProvs = {}; sesLogo = null;
-    sesCurrency = 'USD';
+    sesCurrency = 'ARS';
 }
 // Add a rubro from plantilla to the current session
 function addRubroToSes(catId) {
     if (sesModules.find(m => m.id === catId)) { toast('Ya está agregado'); return; }
     const cat = plantilla.find(c => c.id === catId);
     if (!cat) return;
-    const m = { id: cat.id, name: cat.nombre, emoji: '📦', costUSD: cat.costUSD || 0 };
+    const m = { id: cat.id, name: cat.nombre, emoji: '📦', costUSD: 0 };
     sesModules.push(m);
     modOn[m.id]     = true;
     modExpand[m.id] = false;
-    sesItems[m.id]  = [];
+    // Auto-cargar ítems desde la plantilla
+    const unitMap = { 'm2': 'm²', 'm²': 'm²', 'm3': 'm³', 'm³': 'm³', 'u': 'un', 'ml': 'ml' };
+    sesItems[m.id] = (cat.items || []).map(pItem => {
+        const rawUnit = (pItem.unidad || 'gl').toLowerCase().trim();
+        const unit = unitMap[rawUnit] || (UNITS.includes(rawUnit) ? rawUnit : 'gl');
+        return {
+            id:       uid(),
+            desc:     pItem.descripcion || '',
+            qty:      pItem.cantidad    || 1,
+            unit:     unit,
+            priceUSD: (pItem.precioMat  || 0) + (pItem.precioMO || 0)
+        };
+    });
     sesFiles[m.id]  = [];
     sesNotes[m.id]  = '';
     sesProvs[m.id]  = [];
@@ -1008,6 +1020,9 @@ function addRubroToSes(catId) {
     calcEst();
 }
 function removeRubroFromSes(modId) {
+    const mod = sesModules.find(m => m.id === modId);
+    const hasData = (sesItems[modId]||[]).length > 0 || (sesNotes[modId]||'').trim();
+    if (hasData && !confirm(`¿Quitar "${mod?.name || modId}" del presupuesto? Se perderán los ítems cargados.`)) return;
     sesModules = sesModules.filter(m => m.id !== modId);
     delete modOn[modId]; delete modExpand[modId];
     delete sesItems[modId]; delete sesFiles[modId];
@@ -1026,10 +1041,11 @@ function _refreshPickerChips() {
 }
 function _rubroChips(filter) {
     const q = (filter || '').toLowerCase().trim();
-    const cats = q ? plantilla.filter(c => c.nombre.toLowerCase().includes(q) || c.id.includes(q)) : plantilla;
+    const rawCats = q ? plantilla.filter(c => c.nombre.toLowerCase().includes(q) || c.id.includes(q)) : plantilla;
+    const cats = rawCats.slice().sort((a,b) => a.nombre.localeCompare(b.nombre, 'es'));
     if (!cats.length) return '<div style="color:#bbb;font-size:13px;padding:8px 4px">Sin resultados.</div>';
     return cats.map(cat => {
-        const pal = MOD_PALETTE[plantilla.indexOf(cat) % MOD_PALETTE.length];
+        const pal = MOD_PALETTE[(plantilla.findIndex(c => c.id === cat.id)) % MOD_PALETTE.length];
         const added = !!sesModules.find(m => m.id === cat.id);
         return added
             ? `<div style="display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:20px;background:#f0fdf4;border:1px solid #bbf7d0;opacity:.7">
@@ -1627,32 +1643,60 @@ function vEstimador() {
                 <div class="card-bd">
                     <div class="g2">
 
-                        <!-- Fila 1: Cliente + Proyecto -->
+                        <!-- Fila 1: Cliente + Obra -->
                         <div class="fg">
                             <label class="flabel">Cliente *</label>
                             <input class="finput" id="e-cli" type="text" placeholder="Nombre del cliente">
                         </div>
                         <div class="fg">
-                            <label class="flabel">Proyecto / Local *</label>
+                            <label class="flabel">Obra *</label>
                             <input class="finput" id="e-pro" type="text" placeholder="Ej: Local Palermo">
                         </div>
 
-                        <!-- Fila 2: Tipo + Ubicación -->
+                        <!-- Fila 2: Dirección + Tipo de Presupuesto -->
                         <div class="fg">
-                            <label class="flabel">Tipo</label>
+                            <label class="flabel">Dirección</label>
+                            <input class="finput" id="e-ubic" type="text" placeholder="Calle, número, ciudad">
+                        </div>
+                        <div class="fg">
+                            <label class="flabel">Tipo de Presupuesto</label>
                             <select class="fselect" id="e-tipo">
                                 <option value="local">Local Comercial</option>
                                 <option value="oficina">Oficina / Corporativo</option>
                                 <option value="gastronomia">Gastronomía</option>
+                                <option value="residencial">Residencial</option>
                                 <option value="otro">Otro</option>
                             </select>
                         </div>
+
+                        <!-- Fila 3: M² Totales + FIL -->
                         <div class="fg">
-                            <label class="flabel">Ubicación</label>
-                            <input class="finput" id="e-ubic" type="text" placeholder="Ciudad / Barrio">
+                            <label class="flabel">M² Totales</label>
+                            <input class="finput" id="e-m2" type="number" min="0" placeholder="0" oninput="calcEst()">
+                        </div>
+                        <div class="fg">
+                            <label class="flabel">FIL — Fecha de Inicio de Licitación</label>
+                            <input class="finput" id="e-fil" type="date">
                         </div>
 
-                        <!-- Fila 3: Líder + TC -->
+                        <!-- Fila 4: Días de obra + % MG -->
+                        <div class="fg">
+                            <label class="flabel">Días de obra</label>
+                            <input class="finput" id="e-diasobra" type="number" min="1" placeholder="Ej: 45">
+                        </div>
+                        <div class="fg">
+                            <label class="flabel">% Margen de ganancia</label>
+                            <div style="display:flex;align-items:center;gap:8px">
+                                <input class="finput" id="e-margen" type="text" inputmode="decimal"
+                                    placeholder="${cfg.margen || 10}"
+                                    oninput="calcEst()"
+                                    style="max-width:120px;text-align:right">
+                                <span style="font-size:15px;color:#888;flex-shrink:0">%</span>
+                                <span id="e-margen-preview" style="font-size:13px;color:#16a34a;font-weight:700;white-space:nowrap"></span>
+                            </div>
+                        </div>
+
+                        <!-- Fila 5: Líder + TC -->
                         <div class="fg">
                             <label class="flabel">👤 Líder de proyecto</label>
                             <select class="fselect" id="e-asignado">
@@ -1665,27 +1709,27 @@ function vEstimador() {
                             <div style="display:flex;align-items:center;gap:8px">
                                 <span style="font-size:15px;color:#888;white-space:nowrap;flex-shrink:0">1 USD =</span>
                                 <input class="finput" id="e-tc" type="number" min="1"
-                                    placeholder="${cfg.usdArs}" oninput="calcEst()">
+                                    placeholder="${cfg.usdArs}" oninput="calcEst()" style="max-width:140px">
                                 <span style="font-size:15px;color:#888;flex-shrink:0">ARS</span>
                             </div>
                         </div>
 
-                        <!-- Fila 4: Moneda base -->
+                        <!-- Fila 6: Moneda base -->
                         <div class="fg" style="grid-column:1/-1">
                             <label class="flabel">💱 Moneda base del presupuesto</label>
                             <div style="display:flex;gap:10px">
-                                <label id="cur-usd-lbl" style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:8px;border:2px solid #111;background:#111;color:#fff;cursor:pointer;font-size:14px;font-weight:600;transition:all .15s;flex:1;justify-content:center">
-                                    <input type="radio" name="e-moneda" id="e-moneda-usd" value="USD" checked style="display:none" onchange="onCurrencyChange()">
-                                    💵 USD
+                                <label id="cur-ars-lbl" style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:8px;border:2px solid #111;background:#111;color:#fff;cursor:pointer;font-size:14px;font-weight:600;transition:all .15s;flex:1;justify-content:center">
+                                    <input type="radio" name="e-moneda" id="e-moneda-ars" value="ARS" checked style="display:none" onchange="onCurrencyChange()">
+                                    🪙 $ Pesos
                                 </label>
-                                <label id="cur-ars-lbl" style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:8px;border:2px solid #d0d0d0;background:#fff;color:#555;cursor:pointer;font-size:14px;font-weight:600;transition:all .15s;flex:1;justify-content:center">
-                                    <input type="radio" name="e-moneda" id="e-moneda-ars" value="ARS" style="display:none" onchange="onCurrencyChange()">
-                                    🪙 ARS
+                                <label id="cur-usd-lbl" style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:8px;border:2px solid #d0d0d0;background:#fff;color:#555;cursor:pointer;font-size:14px;font-weight:600;transition:all .15s;flex:1;justify-content:center">
+                                    <input type="radio" name="e-moneda" id="e-moneda-usd" value="USD" style="display:none" onchange="onCurrencyChange()">
+                                    💵 USD
                                 </label>
                             </div>
                         </div>
 
-                        <!-- Fila 5: Notas full-width -->
+                        <!-- Fila 7: Notas -->
                         <div class="fg" style="grid-column:1/-1">
                             <label class="flabel">Notas</label>
                             <textarea class="ftextarea" id="e-notas" rows="2" placeholder="Descripción, requisitos, referencias…"></textarea>
@@ -1763,38 +1807,21 @@ function vEstimador() {
                 </div>
             </div>
 
-            <!-- Superficie + Plano/Logo -->
+            <!-- Plano / Logo -->
             <div class="card mb4">
                 <div class="card-hd">
-                    <span class="card-title">Superficie y Referencia Visual</span>
-                    <span class="card-sub">m² del proyecto y plano / logo del cliente</span>
+                    <span class="card-title">Referencia Visual</span>
+                    <span class="card-sub">Plano o logo del cliente</span>
                 </div>
                 <div class="card-bd">
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start">
-
-                        <!-- m² -->
-                        <div>
-                            <label class="flabel" style="text-align:center;display:block">Metros Cuadrados (m²)</label>
-                            <input class="finput xl" id="e-m2" type="number" min="1" placeholder="0" oninput="calcEst()" style="font-size:36px;padding:14px">
-                            <div class="info-box" style="text-align:center;margin-top:10px;font-size:12px">
-                                Módulos sin ítems usan <strong>m² × tarifa</strong>
-                            </div>
-                        </div>
-
-                        <!-- Plano / Logo -->
-                        <div>
-                            <label class="flabel" style="text-align:center;display:block">Plano / Logo del cliente</label>
-                            <div id="logo-preview-wrap" style="display:none;position:relative;margin-bottom:10px">
-                                <img id="logo-preview-img" src="" style="width:100%;max-height:140px;object-fit:contain;border-radius:6px;border:1.5px solid #d0d0d0;background:#f5f5f5;padding:6px">
-                                <button onclick="clearLogo()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center">✕</button>
-                            </div>
-                            <div id="logo-drop-zone" class="att-zone" style="padding:18px 12px;cursor:pointer;font-size:13px" onclick="document.getElementById('e-logo-file').click()">
-                                📎 Subir plano o logo<br><span style="font-size:11px;color:#aaa">PNG · JPG · PDF</span>
-                            </div>
-                            <input type="file" id="e-logo-file" accept="image/*,application/pdf" style="display:none" onchange="handleLogoUpload(this)">
-                        </div>
-
+                    <div id="logo-preview-wrap" style="display:none;position:relative;margin-bottom:10px">
+                        <img id="logo-preview-img" src="" style="width:100%;max-height:140px;object-fit:contain;border-radius:6px;border:1.5px solid #d0d0d0;background:#f5f5f5;padding:6px">
+                        <button onclick="clearLogo()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center">✕</button>
                     </div>
+                    <div id="logo-drop-zone" class="att-zone" style="padding:18px 12px;cursor:pointer;font-size:13px" onclick="document.getElementById('e-logo-file').click()">
+                        📎 Subir plano o logo<br><span style="font-size:11px;color:#aaa">PNG · JPG · PDF</span>
+                    </div>
+                    <input type="file" id="e-logo-file" accept="image/*,application/pdf" style="display:none" onchange="handleLogoUpload(this)">
                 </div>
             </div>
 
@@ -1895,6 +1922,11 @@ function vModRow(m) {
                 : `<span class="mod-badge m2-mode">m² × ${fPri(m.costUSD)}</span>`
             }
             <span class="mod-subtotal" id="ms-${m.id}">${on && m2val > 0 || isItems ? fPri(total) : '—'}</span>
+            <button onclick="removeRubroFromSes('${m.id}');event.stopPropagation()"
+                title="Quitar este rubro del presupuesto"
+                style="background:none;border:none;color:#ddd;cursor:pointer;padding:3px 6px;font-size:15px;flex-shrink:0;line-height:1;border-radius:4px"
+                onmouseover="this.style.color='#ef4444';this.style.background='#fff1f2'"
+                onmouseout="this.style.color='#ddd';this.style.background='none'">✕</button>
             <span class="mod-arrow ${exp?'open':''}">▼</span>
         </div>
 
@@ -2410,10 +2442,14 @@ function refreshModRow(modId) {
 function getTCForm() {
     return parseFloat(document.getElementById('e-tc')?.value) || cfg.usdArs;
 }
+function getMGForm() {
+    const raw = (document.getElementById('e-margen')?.value || '').replace(',', '.');
+    return parseFloat(raw) || cfg.margen || 10;
+}
 
 function onCurrencyChange() {
     const sel = document.querySelector('input[name="e-moneda"]:checked');
-    sesCurrency = sel ? sel.value : 'USD';
+    sesCurrency = sel ? sel.value : 'ARS';
     const isARS = sesCurrency === 'ARS';
 
     // Update toggle visual
@@ -2440,7 +2476,8 @@ function onCurrencyChange() {
 
 function calcEst() {
     const m2val  = parseFloat(document.getElementById('e-m2')?.value) || 0;
-    const mg     = cfg.margen / 100;
+    const mgVal  = getMGForm();
+    const mg     = mgVal / 100;
     const tc     = getTCForm();
     const total  = grandTotal(m2val);
 
@@ -2456,19 +2493,29 @@ function calcEst() {
     const hasData = total > 0;
 
     // Update labels and TC note dynamically
-    const tcNote  = document.getElementById('r-tc-note');
+    const tcNote   = document.getElementById('r-tc-note');
     const priLblEl = document.getElementById('r-lbl-pri');
     const secLblEl = document.getElementById('r-lbl-sec');
-    if (tcNote)   tcNote.textContent  = `TC: 1 USD = ARS ${fmt(tc)}`;
+    if (tcNote)   tcNote.textContent   = `TC: 1 USD = ARS ${fmt(tc)}`;
     if (priLblEl) priLblEl.textContent = isModeARS() ? 'Total en Pesos Argentinos' : 'Total Estimado';
     if (secLblEl) secLblEl.textContent = isModeARS() ? 'Equivalente en Dólares'    : 'En Pesos Argentinos';
 
+    // Update MG preview next to field
+    const mgPrev = document.getElementById('e-margen-preview');
+    if (mgPrev && hasData) {
+        const ganancia = total * mg;
+        mgPrev.textContent = `+${fPri(ganancia)}`;
+    } else if (mgPrev) {
+        mgPrev.textContent = '';
+    }
+
     if (hasData) {
-        const lo = total*(1-mg), hi = total*(1+mg);
-        if (usdEl)  usdEl.textContent  = fPri(total);
-        if (rngEl)  rngEl.textContent  = `Rango ±${cfg.margen}%: ${fPri(lo)} — ${fPri(hi)}`;
-        if (arsEl)  arsEl.textContent  = fSec(total, tc);
-        if (arsREl) arsREl.textContent = `${fSec(lo,tc)} — ${fSec(hi,tc)}`;
+        const hi = total * (1 + mg);
+        // Número principal = precio al cliente (con MG)
+        if (usdEl)  usdEl.textContent  = fPri(hi);
+        if (rngEl)  rngEl.textContent  = `Costo base: ${fPri(total)} · MG ${mgVal}%`;
+        if (arsEl)  arsEl.textContent  = fSec(hi, tc);
+        if (arsREl) arsREl.textContent = `Base: ${fSec(total, tc)}`;
         if (bkEl)   bkEl.innerHTML     = bkHTML(m2val, total);
     } else {
         if (usdEl)  usdEl.textContent  = '—';
@@ -2480,7 +2527,12 @@ function calcEst() {
 }
 
 function bkHTML(m2val, total) {
-    return sesModules
+    const mgVal    = getMGForm();
+    const mg       = mgVal / 100;
+    const ganancia = total * mg;
+    const clientTotal = total + ganancia;
+
+    const rows = sesModules
         .filter(m => modOn[m.id] !== false)
         .map(m => {
             const v   = modTotal(m.id, m2val);
@@ -2496,6 +2548,23 @@ function bkHTML(m2val, total) {
                 <span style="font-size:14px;color:#aaa;width:28px;text-align:right">${pct}%</span>
             </div>`;
         }).join('');
+
+    const mgRow = (total > 0 && mgVal > 0) ? `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 4px 4px;border-top:1.5px dashed #d0d0d0;margin-top:6px">
+            <span style="font-size:18px;flex-shrink:0">💰</span>
+            <div style="flex:1">
+                <div style="display:flex;justify-content:space-between;font-size:14px">
+                    <span style="color:#6366f1;font-weight:600">Margen ganancia ${mgVal}%</span>
+                    <span style="font-weight:700;color:#6366f1">+ ${fPri(ganancia)}</span>
+                </div>
+            </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px 2px;font-size:15px;font-weight:700;border-top:2px solid #6366f1;margin-top:4px">
+            <span style="color:#111">Total precio cliente</span>
+            <span style="color:#6366f1">${fPri(clientTotal)}</span>
+        </div>` : '';
+
+    return rows + mgRow;
 }
 
 // ─── Prefill estimador when editing ───
@@ -2503,14 +2572,17 @@ function prefill() {
     const p = plist.find(x => x.id === editId);
     if (!p) return;
     const set = (id, v) => { const el = document.getElementById(id); if(el) el.value = v||''; };
-    set('e-cli',  p.cliente);
-    set('e-pro',  p.proyecto);
-    set('e-ubic', p.ubicacion);
-    set('e-notas',p.notas);
-    set('e-m2',   p.metros);
-    set('e-tc',   p.usdArs || cfg.usdArs);
+    set('e-cli',      p.cliente);
+    set('e-pro',      p.proyecto);
+    set('e-ubic',     p.ubicacion);
+    set('e-notas',    p.notas);
+    set('e-m2',       p.metros);
+    set('e-fil',      p.fil || '');
+    set('e-diasobra', p.diasObra || '');
+    set('e-margen',   p.margen !== undefined ? String(p.margen).replace('.', ',') : '');
+    set('e-tc',       p.usdArs || cfg.usdArs);
     // Restore currency
-    sesCurrency = p.moneda || 'USD';
+    sesCurrency = p.moneda || 'ARS';
     const usdRadio = document.getElementById('e-moneda-usd');
     const arsRadio = document.getElementById('e-moneda-ars');
     if (usdRadio) usdRadio.checked = sesCurrency === 'USD';
@@ -2620,6 +2692,8 @@ function guardar(status) {
     const tipo      = document.getElementById('e-tipo')?.value;
     const ubicacion = document.getElementById('e-ubic')?.value?.trim();
     const notas     = document.getElementById('e-notas')?.value?.trim();
+    const fil       = document.getElementById('e-fil')?.value || '';
+    const diasObra  = parseInt(document.getElementById('e-diasobra')?.value) || 0;
     const assignedTo= document.getElementById('e-asignado')?.value || '';
     const contacts  = {
         comercial:      { nom: document.getElementById('e-cc-nom')?.value?.trim()||'', email: document.getElementById('e-cc-email')?.value?.trim()||'', tel: document.getElementById('e-cc-tel')?.value?.trim()||'' },
@@ -2636,7 +2710,8 @@ function guardar(status) {
         return;
     }
 
-    const mg  = cfg.margen / 100;
+    const margen = getMGForm();
+    const mg  = margen / 100;
     const mods = sesModules.map(m => ({
         ...m,
         on:          modOn[m.id] !== false,
@@ -2651,10 +2726,13 @@ function guardar(status) {
     const baseTotal = mods.reduce((s,m) => s + m.sub, 0);
     const tcSave    = getTCForm();
     const moneda    = sesCurrency || 'USD';
-    // Siempre guardamos totalUSD y totalARS independientemente de la moneda base
-    const totalUSD  = moneda === 'ARS' ? baseTotal / tcSave : baseTotal;
-    const totalARS  = moneda === 'ARS' ? baseTotal           : baseTotal * tcSave;
-    const lo = totalUSD * (1-mg), hi = totalUSD * (1+mg);
+    // Guardamos precio al cliente (base + MG%) como totalUSD/ARS
+    // El costo base queda implícito: totalUSD / (1+mg)
+    const baseUSD   = moneda === 'ARS' ? baseTotal / tcSave : baseTotal;
+    const baseARS   = moneda === 'ARS' ? baseTotal           : baseTotal * tcSave;
+    const totalUSD  = baseUSD * (1 + mg);   // precio al cliente en USD
+    const totalARS  = baseARS * (1 + mg);   // precio al cliente en ARS
+    const lo = totalUSD * 0.9, hi = totalUSD * 1.1;  // ±10% estimación preliminar
     const now = new Date().toISOString();
     const actEntry = { id: uid(), userId: currentUser?.id || '', action: editId ? 'edit' : 'create', ts: now };
 
@@ -2662,7 +2740,7 @@ function guardar(status) {
         const idx = plist.findIndex(p => p.id === editId);
         if (idx >= 0) {
             const prev = plist[idx];
-            plist[idx] = { ...prev, cliente, proyecto, tipo, ubicacion, notas, metros, assignedTo,
+            plist[idx] = { ...prev, cliente, proyecto, tipo, ubicacion, notas, metros, fil, diasObra, margen, assignedTo,
                            contacts, logo: sesLogo, moneda,
                            totalUSD, loUSD:lo, hiUSD:hi, totalARS,
                            usdArs:tcSave, modules:mods, status, updAt:now,
@@ -2672,7 +2750,7 @@ function guardar(status) {
         nav('detalle', editId);
     } else {
         const id = Date.now().toString();
-        plist.push({ id, num:nextN(), cliente, proyecto, tipo, ubicacion, notas, metros, assignedTo,
+        plist.push({ id, num:nextN(), cliente, proyecto, tipo, ubicacion, notas, metros, fil, diasObra, margen, assignedTo,
                      contacts, logo: sesLogo, moneda,
                      totalUSD, loUSD:lo, hiUSD:hi, totalARS,
                      usdArs:tcSave, modules:mods, status, fecha:now, updAt:now,
@@ -2710,6 +2788,7 @@ function rHist(p) {
         <td class="tbl-hide-mobile" style="color:#888;font-size:14px">${fDate(p.fecha)}</td>
         <td onclick="event.stopPropagation()" style="white-space:nowrap">
             <button class="btn btn-ghost btn-sm" onclick="startEdit('${p.id}')" title="Editar">✏️</button>
+            <button class="btn btn-ghost btn-sm" onclick="dupP('${p.id}')" title="Duplicar como nueva obra">📋</button>
             <button class="btn btn-ghost btn-sm" onclick="exportExcel('${p.id}')" title="Exportar Excel">📊</button>
             <button class="btn btn-ghost btn-sm" onclick="delP('${p.id}')" title="Eliminar">🗑️</button>
         </td>
@@ -3045,6 +3124,7 @@ function vDetalleModulo(m, usdArs, idx, presup) {
         </div>` : '';
 
     const iStyle = 'width:100%;border:none;background:transparent;font-size:14px;padding:2px 4px;border-radius:3px;outline:none;box-sizing:border-box';
+    const hasSuppItems = (m.items||[]).some(it => it.supplierId);
     const itemsHTML = (m.mode !== 'm2') ? `
         <div style="overflow-x:auto">
             <table style="width:100%;border-collapse:collapse;font-size:14px">
@@ -3067,6 +3147,8 @@ function vDetalleModulo(m, usdArs, idx, presup) {
                     style="color:#7c3aed;font-size:13px">＋ Agregar ítem</button>
                 <button class="btn btn-ghost btn-sm no-print" onclick="showImportFromSupplierModal('${presup.id||m.presupId}','${m.id}')"
                     style="color:#059669;font-size:13px">📥 Importar desde proveedor</button>
+                ${hasSuppItems ? `<button class="btn btn-ghost btn-sm no-print" onclick="showSyncPricesModal('${presup.id||m.presupId}','${m.id}')"
+                    style="color:#d97706;font-size:13px">🔄 Actualizar precios</button>` : ''}
             </div>
         </div>` : '';
 
@@ -3246,10 +3328,13 @@ function _recalcPresupTotals(pi) {
     const isARS  = (p.moneda||'USD') === 'ARS';
     const mg     = (p.margen || cfg.margen || 10) / 100;
     const base   = (p.modules||[]).reduce((s,m) => s + (m.sub||0), 0);
-    p.totalUSD   = isARS ? base/tc : base;
-    p.totalARS   = isARS ? base    : base*tc;
-    p.loUSD      = p.totalUSD * (1 - mg);
-    p.hiUSD      = p.totalUSD * (1 + mg);
+    const baseUSD = isARS ? base/tc : base;
+    const baseARS = isARS ? base    : base*tc;
+    // totalUSD/ARS = precio al cliente (base + MG%)
+    p.totalUSD   = baseUSD * (1 + mg);
+    p.totalARS   = baseARS * (1 + mg);
+    p.loUSD      = p.totalUSD * 0.9;   // ±10% estimación preliminar
+    p.hiUSD      = p.totalUSD * 1.1;
     p.updatedAt  = new Date().toISOString();
 }
 
@@ -3518,9 +3603,24 @@ function dupP(id) {
     const o = plist.find(x => x.id === id);
     if (!o) return;
     const np = JSON.parse(JSON.stringify(o));
-    np.id = Date.now().toString(); np.num = nextN();
-    np.fecha = new Date().toISOString(); np.status = 'borrador'; np.attachments = [];
-    plist.push(np); saveDB(); toast('📋 Duplicado');
+    np.id          = Date.now().toString();
+    np.num         = nextN();
+    np.fecha       = new Date().toISOString();
+    np.updatedAt   = new Date().toISOString();
+    np.createdAt   = new Date().toISOString();
+    np.status      = 'borrador';
+    np.attachments = [];
+    np.activity    = [];
+    np.notas       = (np.notas||'') ? '[Duplicado de #'+o.num+'] ' + np.notas : '[Duplicado de #'+o.num+']';
+    plist.push(np); saveDB();
+
+    // Hint si hay ítems vinculados a proveedores
+    const hasSuppItems = (np.modules||[]).some(m => (m.items||[]).some(it => it.supplierId));
+    if (hasSuppItems) {
+        toast('📋 Presupuesto #'+np.num+' creado · Abrí los módulos para 🔄 actualizar precios');
+    } else {
+        toast('📋 Duplicado como presupuesto #'+np.num);
+    }
     nav('detalle', np.id);
 }
 
@@ -3743,7 +3843,7 @@ function vPlantillaCard() {
         <div class="card-hd" style="flex-wrap:wrap;gap:10px">
             <div>
                 <span class="card-title">Módulos & Rubros</span>
-                <span class="card-sub">${totalCats} rubros · ${totalItems} ítems · USD ${plantilla.reduce((s,c)=>s+(c.costUSD||0),0)}/m² total</span>
+                <span class="card-sub">${totalCats} rubros · ${totalItems} ítems en plantilla</span>
             </div>
             <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
                 <button class="btn btn-success btn-sm" onclick="savePlantillaForm()">💾 Guardar cambios</button>
@@ -3754,10 +3854,6 @@ function vPlantillaCard() {
         <div class="card-bd" style="padding:0">
             <div id="plt-accordion">
                 ${plantilla.map((cat, ci) => plantillaCatRow(cat, ci)).join('')}
-            </div>
-            <div style="padding:10px 18px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:14px">
-                <span style="color:#888">Total base (suma USD/m² todos los rubros):</span>
-                <strong style="color:#131313">USD ${plantilla.reduce((s,c)=>s+(c.costUSD||0),0)}/m²</strong>
             </div>
         </div>
     </div>`;
@@ -3776,7 +3872,7 @@ function plantillaCatRow(cat, ci) {
             <span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;background:${palette.bg};color:${palette.text};font-size:12px;font-weight:800;flex-shrink:0">${esc(cat.id)}</span>
             <span style="flex:1;font-size:15px;font-weight:600;color:#1a1a1a">${esc(cat.nombre)}</span>
             ${hasProveedor ? `<span style="font-size:12px;color:#888;background:#f3f4f6;padding:2px 8px;border-radius:20px;white-space:nowrap">${esc(cat.proveedor)}</span>` : ''}
-            ${(cat.costUSD||0)>0 ? `<span style="font-size:12px;font-weight:700;color:#16a34a;background:#f0fdf4;padding:2px 8px;border-radius:20px;white-space:nowrap">USD ${cat.costUSD}/m²</span>` : ''}
+            <span style="font-size:12px;color:#6366f1;background:#eef2ff;padding:2px 8px;border-radius:20px;white-space:nowrap;font-weight:600">${esc(cat.unidad||'m²')}</span>
             <span style="font-size:13px;color:#bbb;min-width:52px;text-align:right">${totalItems} ítem${totalItems!==1?'s':''}</span>
             <span style="font-size:16px;color:#ccc;transition:transform .2s;transform:rotate(${isOpen?90:0}deg)">›</span>
         </div>
@@ -3789,13 +3885,11 @@ function plantillaCatRow(cat, ci) {
                     <input class="finput" id="plt-cn-${ci}" type="text" value="${esc(cat.nombre)}"
                         style="margin-top:4px;font-size:14px;font-weight:600" placeholder="Nombre del rubro">
                 </div>
-                <div style="width:120px;flex-shrink:0">
-                    <label style="font-size:12px;color:#aaa;font-weight:600;text-transform:uppercase;letter-spacing:.7px">USD / m²</label>
-                    <div style="display:flex;align-items:center;gap:4px;margin-top:4px">
-                        <input class="finput" id="plt-cusd-${ci}" type="number" min="0" step="any" value="${cat.costUSD||0}"
-                            style="font-size:14px;text-align:right;width:72px" placeholder="0">
-                        <span style="font-size:12px;color:#aaa;white-space:nowrap">/m²</span>
-                    </div>
+                <div style="width:130px;flex-shrink:0">
+                    <label style="font-size:12px;color:#aaa;font-weight:600;text-transform:uppercase;letter-spacing:.7px">Unidad de medida</label>
+                    <select class="finput" id="plt-umed-${ci}" style="margin-top:4px;font-size:14px;width:100%">
+                        ${['m²','m³','ml','GL','un','hs','mes','kg'].map(u => `<option value="${u}"${(cat.unidad||'m²')===u?' selected':''}>${u}</option>`).join('')}
+                    </select>
                 </div>
                 <div style="flex:1;min-width:160px">
                     <label style="font-size:12px;color:#aaa;font-weight:600;text-transform:uppercase;letter-spacing:.7px">Proveedor por defecto</label>
@@ -3810,13 +3904,17 @@ function plantillaCatRow(cat, ci) {
                     </div>
                 </div>
                 <div style="display:flex;gap:6px;align-items:flex-end;padding-bottom:1px">
-                    <button class="btn btn-secondary btn-sm" onclick="addPlantillaItem(${ci})">+ Ítem</button>
                     <button class="btn btn-ghost btn-sm" onclick="deletePlantillaCategoria(${ci})" style="color:#e5e5e5" title="Eliminar categoría">🗑</button>
                 </div>
             </div>
             <!-- Items table -->
             <div id="plt-items-${ci}">
                 ${plantillaItemsTable(cat, ci)}
+            </div>
+            <!-- Footer actions -->
+            <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 18px;border-top:1px solid #f0f0f0;background:#fafafa">
+                <button class="btn btn-secondary btn-sm" onclick="addPlantillaItem(${ci})">+ Ítem</button>
+                <button class="btn btn-success btn-sm" onclick="savePlantillaForm()">💾 Guardar</button>
             </div>
         </div>
     </div>`;
@@ -4063,9 +4161,9 @@ function savePlantillaForm() {
     plantilla.forEach((cat, ci) => {
         const nameEl = document.getElementById('plt-cn-'+ci);
         const provEl = document.getElementById('plt-cp-'+ci);  // legacy (unused, kept for safety)
-        const usdEl  = document.getElementById('plt-cusd-'+ci);
-        if (nameEl) cat.nombre    = nameEl.value.trim() || cat.nombre;
-        if (usdEl)  cat.costUSD   = parseFloat(usdEl.value) || 0;
+        const umedEl = document.getElementById('plt-umed-'+ci);
+        if (nameEl) cat.nombre = nameEl.value.trim() || cat.nombre;
+        if (umedEl) cat.unidad = umedEl.value || 'm²';
         cat.items.forEach((item, ii) => {
             const descEl = document.getElementById('plt-d-'+ci+'-'+ii);
             const qEl    = document.getElementById('plt-q-'+ci+'-'+ii);
@@ -4132,7 +4230,7 @@ function deletePlantillaItem(ci, ii) {
 function addPlantillaCategoria() {
     savePlantillaForm();
     const newId = String(plantilla.length + 1).padStart(2, '0');
-    plantilla.push({ id: newId, nombre: 'Nueva categoría', proveedor: '', items: [] });
+    plantilla.push({ id: newId, nombre: 'Nueva categoría', unidad: 'm²', proveedor: '', items: [] });
     savePlantilla();
     if (!window._pltOpen) window._pltOpen = {};
     window._pltOpen[plantilla.length - 1] = true;
@@ -4482,7 +4580,7 @@ async function exportExcel(presupId) {
         ['Cliente', p.cliente, '', 'Proyecto', p.proyecto],
         ['Tipo', tipoLbl(p.tipo), '', 'Ubicacion', p.ubicacion||'—'],
         ['Lider de proyecto', asg, '', 'Estado', statusLbl(p.status)],
-        ['Fecha', fDate(p.fecha), '', 'TC', '1 USD = ARS ' + fmt(tc)],
+        ['FIL', fDate(p.fecha), '', 'TC', '1 USD = ARS ' + fmt(tc)],
         ['Margen MZ', (p.margen||cfg.margen) + '%', '', 'Metros cuadrados', (p.metros||0) + ' m2'],
     ];
     infoRows.forEach(data => {
@@ -4529,9 +4627,17 @@ async function exportExcel(presupId) {
     });
 
     ws1.addRow([]);
-    const tot1 = ws1.addRow(['TOTAL COSTO MZ', '', fv(p.totalUSD), fv(p.totalARS)]);
-    const tot2 = ws1.addRow(['PRECIO AL CLIENTE  (+'+ (p.margen||cfg.margen) +'%)', '', fv(p.hiUSD), fv(p.hiUSD * tc)]);
-    const tot3 = ws1.addRow(['GANANCIA MZ', '', fv(p.hiUSD - p.totalUSD), fv((p.hiUSD - p.totalUSD)*tc)]);
+    // totalUSD/ARS = precio al cliente (base + MG%); derivamos costo base
+    const xlMG      = (p.margen || cfg.margen || 10) / 100;
+    const xlClientUSD = fv(p.totalUSD);
+    const xlClientARS = fv(p.totalARS);
+    const xlCostoUSD  = fv(p.totalUSD / (1 + xlMG));
+    const xlCostoARS  = fv(p.totalARS / (1 + xlMG));
+    const xlGananciaUSD = fv(p.totalUSD - p.totalUSD / (1 + xlMG));
+    const xlGananciaARS = fv(p.totalARS - p.totalARS / (1 + xlMG));
+    const tot1 = ws1.addRow(['COSTO BASE MZ',                                                  '', xlCostoUSD,    xlCostoARS]);
+    const tot2 = ws1.addRow(['PRECIO AL CLIENTE  (+'+ (p.margen||cfg.margen) +'%)',            '', xlClientUSD,   xlClientARS]);
+    const tot3 = ws1.addRow(['GANANCIA MZ',                                                    '', xlGananciaUSD, xlGananciaARS]);
     [tot1,tot2,tot3].forEach((r,i) => {
         r.height = 18;
         r.getCell(1).style = totalStyle;
@@ -4580,42 +4686,51 @@ async function exportExcel(presupId) {
         chRow.height = 16;
         chRow.eachCell(cell => { cell.style = colHeaderStyle(c); });
 
+        const priNFmt = xlMoneda==='ARS' ? '"$ "#,##0'   : '"USD "#,##0';
+        const secNFmt = xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0';
+        const qtyFmt  = '#,##0';   // cantidades: sin símbolo de moneda
+
         if (m.mode === 'items' && m.items?.length > 0) {
             m.items.forEach((item, ii) => {
-                const sub = fv(item.qty) * fv(item.priceUSD);
+                const sub    = fv(item.qty) * fv(item.priceUSD);
                 const subSec = xlMoneda==='ARS' ? sub/tc : sub*tc;
+                const st = itemStyle(c, ii%2===1);
+                const stC = { ...st, alignment:{ horizontal:'center', vertical:'middle' } };
                 const ir  = ws2.addRow([num + '.' + (ii+1), stripEmoji(item.desc||'—'), fv(item.qty), item.unit||'', fv(item.priceUSD), fv(sub), subSec]);
                 ir.height = 16;
-                const st = itemStyle(c, ii%2===1);
-                ir.eachCell(cell => { cell.style = st; });
-                ir.getCell(3).alignment = { horizontal:'center' };
-                ir.getCell(4).alignment = { horizontal:'center' };
-                const priNFmt = xlMoneda==='ARS' ? '"$ "#,##0' : '"USD "#,##0';
-                const secNFmt = xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0';
-                ir.getCell(5).numFmt = priNFmt;
-                ir.getCell(6).numFmt = priNFmt;
-                ir.getCell(7).numFmt = secNFmt;
+                // Aplicar style + numFmt juntos por celda para que no se pierda el formato
+                ir.getCell(1).style = st;
+                ir.getCell(2).style = st;
+                ir.getCell(3).style = { ...stC, numFmt: qtyFmt  };
+                ir.getCell(4).style = stC;
+                ir.getCell(5).style = { ...st,  numFmt: priNFmt };
+                ir.getCell(6).style = { ...st,  numFmt: priNFmt };
+                ir.getCell(7).style = { ...st,  numFmt: secNFmt };
             });
         } else {
             const sub0 = fv(m.sub);
             const sec0 = xlMoneda==='ARS' ? sub0/tc : sub0*tc;
+            const st0  = itemStyle(c, false);
+            const stC0 = { ...st0, alignment:{ horizontal:'center', vertical:'middle' } };
             const ir = ws2.addRow([num+'.1', stripEmoji(m.name), fv(p.metros), 'm2', fv(m.costUSD||0), sub0, sec0]);
             ir.height = 16;
-            ir.eachCell(cell => { cell.style = itemStyle(c, false); });
-            const priNFmt0 = xlMoneda==='ARS' ? '"$ "#,##0' : '"USD "#,##0';
-            const secNFmt0 = xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0';
-            ir.getCell(5).numFmt = priNFmt0;
-            ir.getCell(6).numFmt = priNFmt0;
-            ir.getCell(7).numFmt = secNFmt0;
+            ir.getCell(1).style = st0;
+            ir.getCell(2).style = st0;
+            ir.getCell(3).style = { ...stC0, numFmt: qtyFmt  };
+            ir.getCell(4).style = stC0;
+            ir.getCell(5).style = { ...st0,  numFmt: priNFmt };
+            ir.getCell(6).style = { ...st0,  numFmt: priNFmt };
+            ir.getCell(7).style = { ...st0,  numFmt: secNFmt };
         }
 
         // Subtotal row
         const secSub = xlMoneda==='ARS' ? fv(m.sub)/tc : fv(m.sub)*tc;
         const sr = ws2.addRow(['','SUBTOTAL ' + stripEmoji(m.name).toUpperCase(),'','','',fv(m.sub),secSub]);
         sr.height = 17;
-        sr.eachCell(cell => { cell.style = subtotalStyle(c); });
-        sr.getCell(6).numFmt = xlMoneda==='ARS' ? '"$ "#,##0' : '"USD "#,##0';
-        sr.getCell(7).numFmt = xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0';
+        const sst = subtotalStyle(c);
+        sr.eachCell(cell => { cell.style = sst; });
+        sr.getCell(6).style = { ...sst, numFmt: xlMoneda==='ARS' ? '"$ "#,##0' : '"USD "#,##0' };
+        sr.getCell(7).style = { ...sst, numFmt: xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0' };
 
         // Proveedores
         const provs = m.proveedores || [];
@@ -4641,18 +4756,28 @@ async function exportExcel(presupId) {
     });
 
     ws2.addRow([]);
-    const gt1 = ws2.addRow(['','TOTAL GENERAL','','','',
+    // totalUSD/ARS = precio al cliente (base + MG%); loUSD/hiUSD = ±10% rango estimación
+    const gt2MG  = (p.margen || cfg.margen || 10) / 100;
+    const gt2Costo = xlMoneda==='ARS' ? fv(p.totalARS/(1+gt2MG)) : fv(p.totalUSD/(1+gt2MG));
+    const gt2CostoSec = xlMoneda==='ARS' ? fv(p.totalUSD/(1+gt2MG)) : fv(p.totalARS/(1+gt2MG));
+
+    const gt0 = ws2.addRow(['','COSTO BASE (sin MG)','','','', gt2Costo, gt2CostoSec]);
+    const gt1 = ws2.addRow(['','PRECIO AL CLIENTE  (+'+(p.margen||cfg.margen)+'% MG)','','','',
         xlMoneda==='ARS' ? fv(p.totalARS) : fv(p.totalUSD),
         xlMoneda==='ARS' ? fv(p.totalUSD) : fv(p.totalARS)]);
-    const gt2 = ws2.addRow(['','CON MARGEN +'+(p.margen||cfg.margen)+'%','','','',
-        xlMoneda==='ARS' ? fv(p.hiUSD*tc) : fv(p.hiUSD),
-        xlMoneda==='ARS' ? fv(p.hiUSD)    : fv(p.hiUSD*tc)]);
-    [gt1,gt2].forEach(r => {
+    const gt2 = ws2.addRow(['','ESTIMADO RANGO  (precio ±10%)','','','',
+        xlMoneda==='ARS' ? fv(p.loUSD*tc) + ' — ' + fv(p.hiUSD*tc) : fv(p.loUSD) + ' — ' + fv(p.hiUSD),
+        '']);
+    [gt0,gt1,gt2].forEach(r => {
         r.height = 18;
-        r.eachCell(cell => { cell.style = totalStyle; });
-        r.getCell(6).numFmt = xlMoneda==='ARS' ? '"$ "#,##0' : '"USD "#,##0';
-        r.getCell(7).numFmt = xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0';
+        const gtSt = totalStyle;
+        r.eachCell(cell => { cell.style = gtSt; });
+        r.getCell(6).style = { ...gtSt, numFmt: xlMoneda==='ARS' ? '"$ "#,##0' : '"USD "#,##0' };
+        r.getCell(7).style = { ...gtSt, numFmt: xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0' };
     });
+    gt1.getCell(2).style = { ...totalStyle, fill:{type:'pattern',pattern:'solid',fgColor:{argb:'FFE8F5E9'}}, font:{bold:true,size:11,color:{argb:'FF15803D'}} };
+    gt1.getCell(6).style = { ...totalStyle, numFmt: xlMoneda==='ARS' ? '"$ "#,##0' : '"USD "#,##0', font:{bold:true,size:11,color:{argb:'FF15803D'}} };
+    gt1.getCell(7).style = { ...totalStyle, numFmt: xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0', font:{bold:true,size:11,color:{argb:'FF15803D'}} };
 
     // ── HOJA 3: RESUMEN PROVEEDORES ──────────────────
     const ws3 = wb.addWorksheet('Resumen Proveedores');
@@ -4704,8 +4829,10 @@ async function exportExcel(presupId) {
     });
 
     ws3.addRow([]);
-    const st1 = ws3.addRow(['TOTAL COSTO MZ','','','',fv(p.totalUSD),'USD','']);
-    const st2 = ws3.addRow(['PRECIO AL CLIENTE (+'+(p.margen||cfg.margen)+'%)','','','',fv(p.hiUSD),'USD','']);
+    const ws3MG    = (p.margen || cfg.margen || 10) / 100;
+    const ws3Costo = fv(p.totalUSD / (1 + ws3MG));
+    const st1 = ws3.addRow(['COSTO BASE MZ','','','',ws3Costo,'USD','']);
+    const st2 = ws3.addRow(['PRECIO AL CLIENTE (+'+(p.margen||cfg.margen)+'%)','','','',fv(p.totalUSD),'USD','']);
     [st1,st2].forEach(r => {
         r.height = 18;
         r.eachCell(cell => { cell.style = totalStyle; });
@@ -4904,11 +5031,13 @@ function saveEditInfo(presupId) {
         else { m.sub = (m.items || []).reduce((s, it) => s + ((parseFloat(it.qty)||0) * (parseFloat(it.priceUSD)||0)), 0); }
         baseTotal += m.sub;
     });
-    // baseTotal is in base currency (ARS if moneda=ARS, USD otherwise)
-    plist[idx].totalUSD = isARS ? baseTotal / tc : baseTotal;
-    plist[idx].totalARS = isARS ? baseTotal       : baseTotal * tc;
-    plist[idx].loUSD    = plist[idx].totalUSD * (1 - mg100);
-    plist[idx].hiUSD    = plist[idx].totalUSD * (1 + mg100);
+    // totalUSD/ARS = precio al cliente (base + MG%)
+    const baseUSD = isARS ? baseTotal / tc : baseTotal;
+    const baseARS = isARS ? baseTotal       : baseTotal * tc;
+    plist[idx].totalUSD = baseUSD * (1 + mg100);
+    plist[idx].totalARS = baseARS * (1 + mg100);
+    plist[idx].loUSD    = plist[idx].totalUSD * 0.9;   // -10% estimación preliminar
+    plist[idx].hiUSD    = plist[idx].totalUSD * 1.1;   // +10% estimación preliminar
     logActivity(presupId, 'edit');
     saveDB();
     document.getElementById('eim-overlay').remove();
@@ -5951,11 +6080,13 @@ function impConfirmItems(presupId, modId) {
         if (!item) return;
         const priceUSD = isARS ? item.price / tc : item.price;
         mod.items.push({
-            id:       uid(),
-            desc:     item.desc,
-            qty:      1,
-            unit:     item.unit || 'gl',
-            priceUSD: parseFloat(priceUSD.toFixed(2))
+            id:           uid(),
+            desc:         item.desc,
+            qty:          1,
+            unit:         item.unit || 'gl',
+            priceUSD:     parseFloat(priceUSD.toFixed(2)),
+            supplierId:   s.id,
+            sourcePeriod: last.period
         });
     });
 
@@ -5980,6 +6111,170 @@ function impConfirmItems(presupId, modId) {
     updateResultPanel(presupId);
 }
 
+
+// ═══════════════════════════════════════════════════
+//  SYNC PRECIOS DESDE PROVEEDOR
+// ═══════════════════════════════════════════════════
+
+function showSyncPricesModal(presupId, modId) {
+    const p   = plist.find(x => x.id === presupId);
+    const mod = p?.modules?.find(m => m.id === modId);
+    if (!p || !mod) return;
+    const tc    = p.usdArs || cfg.usdArs || 1;
+    const isARS = (p.moneda||'USD') === 'ARS';
+    const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    const fPer   = per => { const [yr,mo] = (per||'').split('-'); return (months[parseInt(mo)-1]||'?')+' '+yr; };
+
+    // Agrupar ítems por supplierId
+    const suppMap = {};
+    (mod.items||[]).forEach(it => {
+        if (!it.supplierId) return;
+        if (!suppMap[it.supplierId]) suppMap[it.supplierId] = [];
+        suppMap[it.supplierId].push(it);
+    });
+    if (Object.keys(suppMap).length === 0) {
+        toast('ℹ️ No hay ítems vinculados a proveedores en este módulo'); return;
+    }
+
+    // Construir diff por proveedor
+    let hasChanges = false;
+    const diff = [];
+    Object.entries(suppMap).forEach(([sid, items]) => {
+        const s = suppliers.find(x => x.id === sid);
+        if (!s) return;
+        const lists   = (s.priceLists||[]).slice().sort((a,b) => b.period.localeCompare(a.period));
+        const latest  = lists[0];
+        const curPer  = items[0].sourcePeriod || null;
+        const hasNew  = latest && (!curPer || latest.period > curPer);
+        const norm    = d => (d||'').toLowerCase().trim().replace(/\s+/g,' ');
+        const diffItems = items.map(it => {
+            if (!latest) return { item: it, currentUSD: it.priceUSD, newUSD: null, pct: null, found: false };
+            const match = latest.items.find(li => norm(li.desc) === norm(it.desc));
+            if (!match) return { item: it, currentUSD: it.priceUSD, newUSD: null, pct: null, found: false };
+            const newUSD = isARS ? match.price / tc : match.price;
+            const pct    = it.priceUSD > 0 ? ((newUSD - it.priceUSD) / it.priceUSD * 100) : 0;
+            return { item: it, currentUSD: it.priceUSD, newUSD: parseFloat(newUSD.toFixed(2)), pct: parseFloat(pct.toFixed(1)), found: true };
+        });
+        diff.push({ supplierId: sid, supplierName: s.name, currentPeriod: curPer, newPeriod: latest?.period||null, hasNew, items: diffItems });
+    });
+
+    window._syncDiff = { presupId, modId, diff };
+
+    const fAmt = v => {
+        if (v == null) return '—';
+        return isARS ? '$ ' + Math.round(v).toLocaleString('es-AR') : 'USD ' + Math.round(v).toLocaleString('es-AR');
+    };
+
+    const suppHTML = diff.map(sd => {
+        const per    = sd.newPeriod ? fPer(sd.newPeriod) : '—';
+        const curPer = sd.currentPeriod ? fPer(sd.currentPeriod) : 'desconocido';
+        const periodBadge = sd.hasNew
+            ? `<span style="font-size:11px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-weight:600">${curPer} → ${per}</span>`
+            : `<span style="font-size:11px;background:#f0fdf4;color:#166534;padding:2px 8px;border-radius:10px">Ya actualizado · ${per}</span>`;
+
+        const rowsHTML = sd.items.map(di => {
+            if (!di.found) {
+                return `<tr style="opacity:.45">
+                    <td style="padding:8px 12px;font-size:13px">${esc(di.item.desc)}</td>
+                    <td style="padding:8px 12px;font-size:13px;text-align:right">${fAmt(di.currentUSD)}</td>
+                    <td style="padding:8px 12px;font-size:13px;text-align:right;color:#aaa">—</td>
+                    <td style="padding:8px 12px;font-size:12px;text-align:center;color:#aaa;font-style:italic">No encontrado</td>
+                </tr>`;
+            }
+            const changed = Math.abs(di.pct) >= 0.1;
+            if (changed) hasChanges = true;
+            const pctColor = di.pct > 0 ? '#dc2626' : di.pct < 0 ? '#059669' : '#888';
+            const pctStr   = di.pct > 0 ? '+'+di.pct+'%' : di.pct+'%';
+            return `<tr style="${changed ? 'background:#fffbeb' : ''}">
+                <td style="padding:8px 12px;font-size:13px">${esc(di.item.desc)}</td>
+                <td style="padding:8px 12px;font-size:13px;text-align:right;color:#888;text-decoration:${changed?'line-through':''}">${fAmt(di.currentUSD)}</td>
+                <td style="padding:8px 12px;font-size:13px;text-align:right;font-weight:${changed?'700':'400'}">${fAmt(di.newUSD)}</td>
+                <td style="padding:8px 12px;font-size:13px;text-align:center;font-weight:600;color:${pctColor}">${changed ? pctStr : '—'}</td>
+            </tr>`;
+        }).join('');
+
+        return `<div style="margin-bottom:20px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                <span style="font-weight:700;font-size:14px">${esc(sd.supplierName)}</span>
+                ${periodBadge}
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e8e8e8;border-radius:8px;overflow:hidden">
+                <thead>
+                    <tr style="background:#f5f5f5">
+                        <th style="text-align:left;padding:7px 12px;font-size:11px;color:#888;font-weight:600;text-transform:uppercase">Descripción</th>
+                        <th style="text-align:right;padding:7px 12px;font-size:11px;color:#888;font-weight:600;text-transform:uppercase;white-space:nowrap">Precio actual</th>
+                        <th style="text-align:right;padding:7px 12px;font-size:11px;color:#888;font-weight:600;text-transform:uppercase;white-space:nowrap">Precio nuevo</th>
+                        <th style="text-align:center;padding:7px 12px;font-size:11px;color:#888;font-weight:600;text-transform:uppercase;width:70px">Var.</th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHTML}</tbody>
+            </table>
+        </div>`;
+    }).join('');
+
+    const overlay = document.createElement('div');
+    overlay.id = 'sync-prices-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:640px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+        <div style="padding:20px 24px 14px;border-bottom:1px solid #ebebeb;display:flex;align-items:center;justify-content:space-between">
+            <div>
+                <div style="font-size:17px;font-weight:700;color:#111">🔄 Actualizar precios</div>
+                <div style="font-size:13px;color:#888;margin-top:2px">${esc(mod.name)} · precios desde lista de proveedor</div>
+            </div>
+            <button onclick="document.getElementById('sync-prices-overlay').remove()" style="background:none;border:none;cursor:pointer;font-size:22px;color:#888;line-height:1">✕</button>
+        </div>
+        <div style="overflow-y:auto;flex:1;padding:20px 24px">${suppHTML}</div>
+        <div style="padding:14px 24px;border-top:1px solid #ebebeb;display:flex;gap:10px;align-items:center;justify-content:space-between">
+            <span style="font-size:12px;color:#aaa">Los ítems "No encontrado" se conservan sin cambios</span>
+            <div style="display:flex;gap:10px">
+                <button class="btn btn-secondary" onclick="document.getElementById('sync-prices-overlay').remove()">Cancelar</button>
+                <button class="btn btn-primary" id="sync-apply-btn" ${!hasChanges ? 'disabled' : ''} onclick="applySyncPrices()"
+                    style="${!hasChanges ? 'opacity:.45;cursor:not-allowed' : ''}">
+                    ✅ Aplicar cambios
+                </button>
+            </div>
+        </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+function applySyncPrices() {
+    const { presupId, modId, diff } = window._syncDiff || {};
+    if (!presupId || !modId) return;
+    const pi  = plist.findIndex(x => x.id === presupId);
+    const p   = plist[pi];
+    const mod = p?.modules?.find(m => m.id === modId);
+    if (!mod) return;
+
+    let updated = 0;
+    diff.forEach(sd => {
+        sd.items.forEach(di => {
+            if (!di.found || Math.abs(di.pct||0) < 0.1) return;
+            const it = mod.items.find(x => x.id === di.item.id);
+            if (!it) return;
+            it.priceUSD     = di.newUSD;
+            it.sourcePeriod = sd.newPeriod;
+            updated++;
+        });
+    });
+
+    if (updated === 0) { toast('ℹ️ Sin cambios para aplicar'); return; }
+
+    mod.sub = mod.items.reduce((s,it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.priceUSD)||0), 0);
+    _recalcPresupTotals(pi);
+    saveDB();
+
+    document.getElementById('sync-prices-overlay')?.remove();
+    toast('✅ ' + updated + ' precio'+(updated!==1?'s':'')+' actualizados');
+
+    const tbody = document.getElementById('dmi-tbody-' + modId);
+    if (tbody) tbody.innerHTML = mod.items.map((it,ri) => vDetItemRow(it, ri, modId, p)).join('');
+    const totEl = document.getElementById('dm-tot-' + modId);
+    if (totEl) totEl.innerHTML = `<div class="det-mod-usd">${fPriP(mod.sub,p)}</div><div class="det-mod-ars">${fSecP(mod.sub,p)}</div>`;
+    updateResultPanel(presupId);
+}
 
 // ═══════════════════════════════════════════════════
 //  BOOT
