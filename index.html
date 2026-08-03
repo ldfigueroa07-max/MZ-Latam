@@ -1125,8 +1125,11 @@ function render() {
 //  FORMATTERS
 // ═══════════════════════════════════════════════════
 const fmt   = n => Math.round(n).toLocaleString('es-AR');
+const fmtD  = n => (+n||0).toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2});
 const fUSD  = n => 'USD ' + fmt(n);
 const fARS  = n => '$ '   + fmt(n);
+const fUSD2 = n => 'USD ' + fmtD(n);   // con decimales — para ítems
+const fARS2 = n => '$ '   + fmtD(n);   // con decimales — para ítems
 const fDate = s => new Date(s).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
 const nextN = () => (plist.reduce((a,b) => Math.max(a, b.num||0), 0)) + 1;
 const uid   = () => Date.now().toString(36) + Math.random().toString(36).slice(2,5);
@@ -1637,6 +1640,34 @@ function vEstimador() {
 
         <!-- LEFT -->
         <div>
+            <!-- Importar Licitación -->
+            <div class="card mb4" id="import-lic-card">
+                <div class="card-hd" style="background:linear-gradient(135deg,#f8f9ff,#ede9fe)">
+                    <div>
+                        <span class="card-title">📥 Importar Licitación del cliente</span>
+                        <div class="card-sub">Excel con rubros e ítems → se carga automáticamente</div>
+                    </div>
+                </div>
+                <div class="card-bd">
+                    <div id="lic-drop-zone"
+                         style="border:2px dashed #d0d0d0;border-radius:10px;padding:26px;text-align:center;cursor:pointer;transition:all .2s"
+                         onclick="document.getElementById('lic-file-input').click()"
+                         ondragover="event.preventDefault();this.style.borderColor='#7c3aed';this.style.background='#f5f3ff'"
+                         ondragleave="this.style.borderColor='#d0d0d0';this.style.background=''"
+                         ondrop="event.preventDefault();this.style.borderColor='#d0d0d0';this.style.background='';handleLicitacionFile(event.dataTransfer.files[0])">
+                        <div style="font-size:30px;margin-bottom:8px">📄</div>
+                        <div style="font-weight:600;color:#333;font-size:15px">Arrastrá el Excel del cliente aquí</div>
+                        <div style="font-size:13px;color:#888;margin-top:4px">o hacé click para seleccionar · solo .xlsx</div>
+                    </div>
+                    <input type="file" id="lic-file-input" accept=".xlsx" style="display:none"
+                           onchange="handleLicitacionFile(this.files[0])">
+                    <div style="text-align:center;margin-top:12px">
+                        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('import-lic-card').style.display='none'"
+                            style="color:#aaa;font-size:13px">Cargar manualmente →</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Datos del proyecto -->
             <div class="card mb4">
                 <div class="card-hd"><span class="card-title">Datos del Proyecto</span></div>
@@ -2855,7 +2886,8 @@ function vDetalle(id) {
 
     const sts  = ['abierto','presentado','aprobado','perdido'];
     const ci   = sts.indexOf(p.status);
-    const mods = (p.modules||[]).filter(m => m.on !== false && m.sub > 0);
+    // Show modules with sub > 0 OR with items (licitaciones start at $0)
+    const mods = (p.modules||[]).filter(m => m.on !== false && (m.sub > 0 || (m.items||[]).length > 0));
 
     return `
     <div class="page-grid">
@@ -3057,6 +3089,20 @@ function vDetalle(id) {
                     <button class="btn btn-secondary" onclick="dupP('${id}')">📋 Duplicar</button>
                     <button class="btn btn-secondary" onclick="exportExcel('${id}')">📊 Exportar Excel</button>
                     <button class="btn btn-secondary" onclick="window.print()">🖨️ Imprimir / PDF</button>
+                    ${p.licitacion ? `
+                    <div style="margin:4px 0;border-top:1px solid #f0f0f0;padding-top:7px">
+                        <button class="btn btn-secondary" onclick="matchLicitacionWithSuppliers('${id}')"
+                            style="width:100%;background:#ede9fe;border-color:#c4b5fd;color:#6d28d9;font-weight:600">
+                            🔍 Cotizar con proveedores
+                        </button>
+                    </div>
+                    <button class="btn btn-secondary" onclick="exportLicitacionFinal('${id}')"
+                        style="background:#f0fdf4;border-color:#86efac;color:#166534;font-weight:600">
+                        📤 Exportar Licitación Final
+                    </button>
+                    <div style="font-size:11px;color:#aaa;text-align:center;margin-top:-3px">
+                        📄 ${esc(p.licitacion.fileName)}
+                    </div>` : ''}
                     <button class="btn btn-danger"    onclick="delP('${id}')">🗑️ Eliminar</button>
                 </div>
             </div>
@@ -3248,7 +3294,7 @@ function vDetItemRow(i, ri, modId, presup) {
                 onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','priceUSD',this.value)"
                 oninput="liveSubDet('${i.id}','${pid}')">
         </td>
-        <td id="dmi-sub-${i.id}" style="padding:6px 12px;border-bottom:1px solid #efefef;text-align:right;font-weight:700;color:#111;font-size:14px;white-space:nowrap">${fPriP(sub, presup)}</td>
+        <td id="dmi-sub-${i.id}" style="padding:6px 12px;border-bottom:1px solid #efefef;text-align:right;font-weight:700;color:#111;font-size:14px;white-space:nowrap">${(presup?.moneda||'USD')==='ARS' ? fARS2(sub) : fUSD2(sub)}</td>
         <td style="padding:6px 4px;border-bottom:1px solid #efefef;text-align:center">
             <button onclick="rmDetItem('${pid}','${modId}','${i.id}')"
                 style="background:none;border:none;color:#ddd;cursor:pointer;font-size:14px;padding:2px 5px;border-radius:3px;line-height:1"
@@ -3265,7 +3311,7 @@ function liveSubDet(itemId, presupId) {
     const sub   = qty * price;
     const subEl = document.getElementById('dmi-sub-' + itemId);
     const p     = plist.find(x => x.id === presupId);
-    if (subEl && p) subEl.textContent = fPriP(sub, p);
+    if (subEl && p) subEl.textContent = (p.moneda||'USD')==='ARS' ? fARS2(sub) : fUSD2(sub);
 }
 
 function saveDetItem(presupId, modId, itemId, field, rawVal) {
@@ -6636,6 +6682,515 @@ function seedVillaDelParque() {
     plist.push(p3);
     saveDB();
     localStorage.setItem('mz_demo_seeded_v4', '1');
+}
+
+// ═══════════════════════════════════════════════════
+//  IMPORTAR LICITACIÓN — Bloques 2, 4 y 3
+// ═══════════════════════════════════════════════════
+
+async function handleLicitacionFile(file) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+        toast('❌ Solo se aceptan archivos .xlsx');
+        return;
+    }
+    const zone = document.getElementById('lic-drop-zone');
+    if (zone) zone.innerHTML = '<div style="font-size:14px;color:#888;padding:10px 0">⏳ Leyendo archivo…</div>';
+    try {
+        // Lazy-load ExcelJS (misma lógica que exportExcel)
+        if (!window.ExcelJS) {
+            await new Promise((res, rej) => {
+                const sc = document.createElement('script');
+                sc.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+                sc.onload = res; sc.onerror = rej;
+                document.head.appendChild(sc);
+            });
+        }
+        const buffer = await file.arrayBuffer();
+        const parsed = await parseLicitacionXlsx(buffer);
+        // Convert buffer → base64
+        const bytes = new Uint8Array(buffer);
+        let bin = '';
+        const chunk = 8192;
+        for (let i = 0; i < bytes.length; i += chunk) {
+            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+        }
+        const b64 = btoa(bin);
+        showLicitacionPreview(parsed, file.name, b64);
+        if (zone) zone.innerHTML = `
+            <div style="font-size:22px;margin-bottom:6px">✅</div>
+            <div style="font-weight:600;color:#059669;font-size:14px">${esc(file.name)}</div>
+            <div style="font-size:13px;color:#888;margin-top:3px">${parsed.modules.length} módulo${parsed.modules.length!==1?'s':''} · ${parsed.totalItems} ítem${parsed.totalItems!==1?'s':''} detectados</div>`;
+    } catch(err) {
+        if (zone) zone.innerHTML = `
+            <div style="font-size:22px;margin-bottom:6px">❌</div>
+            <div style="font-size:13px;color:#dc2626">${esc(err.message)}</div>
+            <div style="font-size:12px;color:#888;margin-top:6px;cursor:pointer;text-decoration:underline"
+                 onclick="document.getElementById('lic-file-input').click()">Intentar con otro archivo</div>`;
+        toast('❌ ' + err.message, 'error');
+    }
+}
+
+async function parseLicitacionXlsx(buffer) {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer);
+    const ws = wb.worksheets[0];
+    if (!ws) throw new Error('El archivo no tiene hojas de cálculo.');
+
+    const norm = v => String(v == null ? '' : v).toLowerCase().trim()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+
+    // ── Detect header row ────────────────────────────────────
+    let headerRow = -1;
+    const cols = {};
+
+    for (let r = 1; r <= 30 && headerRow < 0; r++) {
+        const row = ws.getRow(r);
+        const cells = {};
+        row.eachCell({ includeEmpty: false }, (cell, col) => {
+            // Only use plain string cell values for header detection (not formula objects)
+            const v = cell.value;
+            if (typeof v === 'string') cells[col] = norm(v);
+        });
+
+        // Try to assign columns from this row
+        const candidate = {};
+        Object.entries(cells).forEach(([col, v]) => {
+            const c = parseInt(col);
+            if (!candidate.code  && (v === 'item' || v === 'codigo' || v === 'cap.' || v === 'capitulo' || v.match(/^n[°o.]/))) candidate.code  = c;
+            if (!candidate.desc  && (v.includes('descripci') || v === 'rubro/tarea' || v === 'rubro' || v === 'tarea' || v.includes('designacion'))) candidate.desc  = c;
+            if (!candidate.unit  && (v === 'u' || v === 'ud' || v === 'udad' || v.includes('unidad')))                           candidate.unit  = c;
+            if (!candidate.qty   && (v === 'cant' || v.includes('cantidad')))                                                     candidate.qty   = c;
+            if (!candidate.price && (v.includes('p.unit') || v.includes('unitario') || v.includes('precio mat') || v.includes('precio unit') || v.includes('costo unit') || v.includes('p. unit'))) candidate.price = c;
+        });
+
+        // Valid header: must have desc AND qty in DIFFERENT columns
+        if (!candidate.desc || !candidate.qty || candidate.desc === candidate.qty) continue;
+
+        headerRow = r;
+        Object.assign(cols, candidate);
+    }
+
+    if (headerRow < 0) throw new Error('No se encontró la fila de encabezados. Verificá que el Excel tenga columnas de Descripción y Cantidad.');
+    if (!cols.desc)    throw new Error('No se pudo identificar la columna de descripción.');
+    // Fallbacks for optional cols
+    if (!cols.code)  cols.code  = Math.max(1, cols.desc - 1);
+    if (!cols.unit)  cols.unit  = cols.qty  !== cols.desc + 1 ? cols.desc + 1 : cols.desc + 2;
+    if (!cols.price) cols.price = cols.desc + 3;
+
+    // ── Parse rows ────────────────────────────────────────────
+    // Handle plain strings AND Excel formula objects {formula, result}
+    const getCellText = cell => {
+        const v = cell.value;
+        if (v == null) return '';
+        if (typeof v === 'string') return v;
+        if (typeof v === 'number') return String(v);
+        if (typeof v === 'object') {
+            // Formula cell: {formula: "...", result: ...}
+            const r = v.result;
+            if (r == null || r instanceof Date) return ''; // depth-1 sections or unresolved
+            if (typeof r === 'string') return r;
+            if (typeof r === 'number') return String(r);
+        }
+        return '';
+    };
+
+    const codeDepth = v => {
+        const s = String(v == null ? '' : v).trim();
+        if (!s || !/^\d/.test(s)) return 0;
+        return s.split('.').length;
+    };
+
+    const modules = [];
+    let currentMod = null;
+
+    for (let r = headerRow + 1; r <= ws.rowCount; r++) {
+        const row  = ws.getRow(r);
+        const code = getCellText(row.getCell(cols.code)).trim();
+        const desc = getCellText(row.getCell(cols.desc)).trim();
+
+        if (!code || !/^\d/.test(code)) continue;
+        const depth = codeDepth(code);
+        if (depth < 2) continue;
+
+        if (depth === 2) {
+            if (desc) {
+                currentMod = { code, name: desc, items: [] };
+                modules.push(currentMod);
+            }
+            continue;
+        }
+
+        if (!currentMod || !desc) continue;
+
+        const unitV    = getCellText(row.getCell(cols.unit)).trim() || 'gl';
+        const qtyNum   = parseFloat(getCellText(row.getCell(cols.qty)).replace(',', '.'))   || 1;
+        const priceNum = parseFloat(getCellText(row.getCell(cols.price)).replace(',', '.')) || 0;
+
+        currentMod.items.push({ desc, unit: unitV, qty: qtyNum, price: priceNum, row: r });
+    }
+
+    const validMods = modules.filter(m => m.items.length > 0);
+    if (validMods.length === 0) throw new Error('No se encontraron módulos con ítems. Verificá que el Excel tenga secciones numeradas (ej: 1.1, 1.2…)');
+
+    return {
+        modules:    validMods,
+        cols,
+        headerRow,
+        sheetName:  ws.name,
+        totalItems: validMods.reduce((s, m) => s + m.items.length, 0)
+    };
+}
+
+function showLicitacionPreview(parsed, fileName, fileBase64) {
+    window._licParsed = parsed;
+    window._licFile   = { name: fileName, data: fileBase64 };
+
+    const modRows = parsed.modules.map(m => `
+        <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:9px 0;border-bottom:1px solid #f0f0f0">
+            <div style="font-size:13px;font-weight:600;color:#333;flex:1">${esc(m.name)}</div>
+            <span style="font-size:12px;color:#888;white-space:nowrap;margin-left:12px">
+                ${m.items.length} ítem${m.items.length!==1?'s':''}
+            </span>
+        </div>`).join('');
+
+    const ol = document.createElement('div');
+    ol.id = 'lic-preview-overlay';
+    ol.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+    ol.innerHTML = `
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:540px;max-height:88vh;
+                display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.28)">
+        <div style="padding:20px 24px 14px;border-bottom:1px solid #ebebeb">
+            <div style="font-size:17px;font-weight:700;color:#111">📥 Licitación detectada</div>
+            <div style="font-size:13px;color:#888;margin-top:3px">${esc(fileName)}</div>
+        </div>
+        <div style="padding:13px 24px 8px;background:#f0fdf4;border-bottom:1px solid #d1fae5">
+            <div style="font-size:13px;color:#065f46;font-weight:600">
+                ${parsed.modules.length} módulo${parsed.modules.length!==1?'s':''} ·
+                ${parsed.totalItems} ítem${parsed.totalItems!==1?'s':''} ·
+                Los precios quedan en $0 para completar con proveedores
+            </div>
+        </div>
+        <div style="overflow-y:auto;flex:1;padding:12px 24px">${modRows}</div>
+        <div style="padding:14px 24px;border-top:1px solid #ebebeb;display:flex;gap:10px;justify-content:flex-end">
+            <button class="btn btn-secondary" onclick="document.getElementById('lic-preview-overlay').remove()">Cancelar</button>
+            <button class="btn btn-primary"   onclick="confirmLicitacionImport()">✅ Crear licitación</button>
+        </div>
+    </div>`;
+    document.body.appendChild(ol);
+    ol.addEventListener('click', e => { if (e.target === ol) ol.remove(); });
+}
+
+function confirmLicitacionImport() {
+    const parsed  = window._licParsed;
+    const licFile = window._licFile;
+    if (!parsed || !licFile) return;
+    document.getElementById('lic-preview-overlay')?.remove();
+
+    const tc  = cfg.usdArs || 1450;
+    const mg  = cfg.margen  || 15;
+
+    const modules = parsed.modules.map(m => {
+        const items = m.items.map(it => ({
+            id:       uid(),
+            desc:     it.desc,
+            qty:      it.qty,
+            unit:     it.unit,
+            priceUSD: parseFloat(((it.price || 0) / tc).toFixed(2)),
+            licitRow: it.row
+        }));
+        const sub = items.reduce((s, it) => s + it.qty * it.priceUSD, 0);
+        return {
+            id:         uid(),
+            name:       m.name,
+            emoji:      '📦',
+            costUSD:    0,
+            on:         true,
+            mode:       'items',
+            items,
+            files:      [],
+            notes:      '',
+            proveedores:[],
+            sub
+        };
+    });
+
+    const baseTotal = modules.reduce((s, m) => s + m.sub, 0);
+    const totalUSD  = baseTotal * (1 + mg / 100);
+
+    const cleanName = licFile.name
+        .replace(/\.xlsx$/i, '')
+        .replace(/_/g, ' ')
+        .replace(/MZ\s*LATAM/i, '')
+        .trim();
+
+    const np = {
+        id:          Date.now().toString(),
+        num:         nextN(),
+        cliente:     '',
+        proyecto:    cleanName,
+        tipo:        'local',
+        ubicacion:   '',
+        notas:       '',
+        metros:      0,
+        moneda:      'ARS',
+        usdArs:      tc,
+        margen:      mg,
+        modules,
+        totalUSD,
+        totalARS:    totalUSD * tc,
+        loUSD:       totalUSD * 0.9,
+        hiUSD:       totalUSD * 1.1,
+        status:      'abierto',
+        fecha:       new Date().toISOString(),
+        updatedAt:   new Date().toISOString(),
+        createdAt:   new Date().toISOString(),
+        attachments: [],
+        activity:    [],
+        contacts:    { comercial:{nom:'',email:'',tel:''}, administracion:{nom:'',email:'',tel:''}, legales:{nom:'',email:'',tel:''} },
+        assignedTo:  currentUser ? currentUser.id : '',
+        licitacion: {
+            fileName:  licFile.name,
+            fileData:  licFile.data,
+            cols:      parsed.cols,
+            headerRow: parsed.headerRow,
+            sheetName: parsed.sheetName
+        }
+    };
+
+    plist.push(np);
+    saveDB();
+    window._licParsed = null;
+    window._licFile   = null;
+    toast('✅ Licitación importada — ' + np.modules.length + ' módulos, ' + parsed.totalItems + ' ítems');
+    nav('detalle', np.id);
+}
+
+// ── Bloque 4: Match con proveedores ──────────────────────────────
+
+function matchLicitacionWithSuppliers(presupId) {
+    const p = plist.find(x => x.id === presupId);
+    if (!p) return;
+
+    // Gather all supplier items (latest price list per supplier)
+    const allSupItems = [];
+    suppliers.forEach(s => {
+        const lists = (s.priceLists||[]).slice().sort((a,b) => b.period.localeCompare(a.period));
+        const latest = lists[0];
+        if (!latest) return;
+        (latest.items||[]).forEach(li => {
+            allSupItems.push({ supplierId: s.id, supplierName: s.name, period: latest.period, item: li });
+        });
+    });
+
+    if (allSupItems.length === 0) {
+        toast('ℹ️ No hay proveedores con listas de precios cargadas');
+        return;
+    }
+
+    const tc   = p.usdArs || cfg.usdArs || 1450;
+    const isARS = (p.moneda || 'USD') === 'ARS';
+    const norm  = v => (v||'').toLowerCase().trim()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g,' ');
+
+    const matches = [];
+    let skipped = 0;
+
+    (p.modules||[]).forEach(m => {
+        (m.items||[]).forEach(it => {
+            const normDesc = norm(it.desc);
+            // Try exact match first, then partial
+            let found = allSupItems.find(si => norm(si.item.desc) === normDesc);
+            if (!found) {
+                found = allSupItems.find(si => norm(si.item.desc).includes(normDesc) && normDesc.length > 5);
+            }
+            if (!found) { skipped++; return; }
+            const priceUSD = isARS ? found.item.price / tc : found.item.price;
+            matches.push({
+                modId:        m.id,
+                modName:      m.name,
+                itemId:       it.id,
+                itemDesc:     it.desc,
+                itemQty:      it.qty,
+                itemUnit:     it.unit,
+                currentUSD:   it.priceUSD || 0,
+                supplierId:   found.supplierId,
+                supplierName: found.supplierName,
+                period:       found.period,
+                priceUSD:     parseFloat(priceUSD.toFixed(2)),
+                priceDisp:    isARS ? '$ ' + Math.round(found.item.price).toLocaleString('es-AR') : 'USD ' + Math.round(priceUSD)
+            });
+        });
+    });
+
+    if (matches.length === 0) {
+        toast('ℹ️ No se encontraron coincidencias con listas de precios de proveedores');
+        return;
+    }
+
+    showSupMatchModal(presupId, matches, skipped);
+}
+
+function showSupMatchModal(presupId, matches, skipped) {
+    window._supMatch = { presupId, matches };
+
+    // Group by supplier
+    const bySupp = {};
+    matches.forEach(m => {
+        if (!bySupp[m.supplierId]) bySupp[m.supplierId] = { name: m.supplierName, items: [] };
+        bySupp[m.supplierId].items.push(m);
+    });
+
+    const suppBlocks = Object.entries(bySupp).map(([sid, grp]) => `
+        <div style="margin-bottom:14px">
+            <div style="font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+                        color:#6d28d9;padding:6px 0 4px;border-bottom:1.5px solid #ede9fe;margin-bottom:6px">
+                🏢 ${esc(grp.name)}
+            </div>
+            ${grp.items.map(it => `
+            <div style="display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid #f5f5f5"
+                 data-match-id="${it.itemId}">
+                <input type="checkbox" checked style="flex-shrink:0;width:15px;height:15px;cursor:pointer"
+                       id="sm-chk-${it.itemId}">
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:500;color:#222;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                         title="${esc(it.itemDesc)}">${esc(it.itemDesc)}</div>
+                    <div style="font-size:11px;color:#888;margin-top:1px">${esc(it.modName)}</div>
+                </div>
+                <div style="text-align:right;flex-shrink:0">
+                    <div style="font-size:13px;font-weight:700;color:#059669">${it.priceDisp}</div>
+                    ${it.currentUSD > 0
+                        ? `<div style="font-size:11px;color:#aaa;text-decoration:line-through">ant. ${fUSD(it.currentUSD)}</div>`
+                        : `<div style="font-size:11px;color:#aaa">sin precio previo</div>`}
+                </div>
+            </div>`).join('')}
+        </div>`).join('');
+
+    const skippedNote = skipped > 0
+        ? `<div style="font-size:12px;color:#aaa;text-align:center;margin-top:8px">${skipped} ítem${skipped!==1?'s':''} sin coincidencia en listas de precios</div>`
+        : '';
+
+    const ol = document.createElement('div');
+    ol.id = 'sup-match-overlay';
+    ol.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+    ol.innerHTML = `
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:560px;max-height:88vh;
+                display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.28)">
+        <div style="padding:20px 24px 14px;border-bottom:1px solid #ebebeb">
+            <div style="font-size:17px;font-weight:700;color:#111">🔍 Coincidencias con proveedores</div>
+            <div style="font-size:13px;color:#888;margin-top:3px">${matches.length} ítem${matches.length!==1?'s':''} encontrado${matches.length!==1?'s':''} · Destildá los que no querés aplicar</div>
+        </div>
+        <div style="overflow-y:auto;flex:1;padding:14px 24px">${suppBlocks}${skippedNote}</div>
+        <div style="padding:14px 24px;border-top:1px solid #ebebeb;display:flex;gap:10px;justify-content:flex-end">
+            <button class="btn btn-secondary" onclick="document.getElementById('sup-match-overlay').remove()">Cancelar</button>
+            <button class="btn btn-primary"   onclick="applySupMatch()" style="background:#6d28d9;border-color:#6d28d9">✅ Aplicar precios</button>
+        </div>
+    </div>`;
+    document.body.appendChild(ol);
+    ol.addEventListener('click', e => { if (e.target === ol) ol.remove(); });
+}
+
+function applySupMatch() {
+    const { presupId, matches } = window._supMatch || {};
+    if (!presupId || !matches) return;
+
+    const p = plist.find(x => x.id === presupId);
+    if (!p) return;
+
+    let applied = 0;
+
+    matches.forEach(mt => {
+        const chk = document.getElementById('sm-chk-' + mt.itemId);
+        if (chk && !chk.checked) return;
+
+        const mod = (p.modules||[]).find(m => m.id === mt.modId);
+        if (!mod) return;
+        const it = (mod.items||[]).find(i => i.id === mt.itemId);
+        if (!it) return;
+
+        it.priceUSD      = mt.priceUSD;
+        it.supplierId    = mt.supplierId;
+        it.sourcePeriod  = mt.period;
+        applied++;
+    });
+
+    if (applied === 0) { toast('ℹ️ Ningún ítem seleccionado'); return; }
+
+    // Recalculate all module subs
+    (p.modules||[]).forEach(m => {
+        m.sub = (m.items||[]).reduce((s, it) => s + (parseFloat(it.qty)||0) * (parseFloat(it.priceUSD)||0), 0);
+    });
+    _recalcPresupTotals(plist.indexOf(p));
+    saveDB();
+
+    document.getElementById('sup-match-overlay')?.remove();
+    window._supMatch = null;
+
+    toast('✅ ' + applied + ' precio' + (applied!==1?'s':'') + ' actualizados desde proveedores');
+    nav('detalle', presupId);
+}
+
+// ── Bloque 3: Exportar Licitación Final ──────────────────────────
+
+async function exportLicitacionFinal(presupId) {
+    const p = plist.find(x => x.id === presupId);
+    if (!p?.licitacion?.fileData) { toast('❌ No hay licitación original adjunta'); return; }
+
+    toast('⏳ Generando licitación con precios MZ…');
+
+    try {
+        // Lazy-load ExcelJS
+        if (!window.ExcelJS) {
+            await new Promise((res, rej) => {
+                const sc = document.createElement('script');
+                sc.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+                sc.onload = res; sc.onerror = rej;
+                document.head.appendChild(sc);
+            });
+        }
+
+        const lic  = p.licitacion;
+        const tc   = p.usdArs || cfg.usdArs || 1450;
+        const isARS = (p.moneda || 'USD') === 'ARS';
+
+        // Decode base64 → ArrayBuffer
+        const bin   = atob(lic.fileData);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(bytes.buffer);
+        const ws = wb.getWorksheet(lic.sheetName) || wb.worksheets[0];
+
+        const priceCol = lic.cols.price;
+
+        // Write prices back to original rows
+        (p.modules||[]).forEach(m => {
+            (m.items||[]).forEach(it => {
+                if (!it.licitRow) return;
+                const rawPrice = isARS
+                    ? it.priceUSD * tc        // ARS file → write ARS
+                    : it.priceUSD;            // USD file → write USD
+                if (rawPrice <= 0) return;
+                const cell = ws.getRow(it.licitRow).getCell(priceCol);
+                cell.value = parseFloat(rawPrice.toFixed(2));
+            });
+        });
+
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url    = URL.createObjectURL(blob);
+        const a      = document.createElement('a');
+        a.href       = url;
+        a.download   = lic.fileName.replace(/\.xlsx$/i, '_MZ.xlsx');
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('✅ Licitación exportada — ' + lic.fileName.replace(/\.xlsx$/i, '_MZ.xlsx'));
+    } catch(err) {
+        toast('❌ Error al exportar: ' + err.message, 'error');
+        console.error(err);
+    }
 }
 
 (function boot() {
