@@ -3491,9 +3491,10 @@ function vDetalleModulo(m, usdArs, idx, presup) {
         <div style="padding:12px 18px 14px;border-top:1px solid #ebebeb">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
                 <span style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#999">◈ Proveedores</span>
-                <button class="btn btn-ghost btn-sm no-print" onclick="event.stopPropagation();showAddModProvModal('${m.id}')"
+                <button class="btn btn-ghost btn-sm no-print" onclick="event.stopPropagation();showAddModProvModal('${m.id}','${presup.id}')"
                     style="font-size:12px;color:#7c3aed;padding:3px 8px">＋ Agregar proveedor</button>
             </div>
+            <div id="det-prov-${m.id}">
             ${hasProvs ? `<table style="width:100%;border-collapse:collapse;font-size:13px">
                 <thead><tr style="border-bottom:1px solid #eee">
                     <th style="text-align:left;padding:5px 8px;font-size:11px;color:#aaa;font-weight:600;text-transform:uppercase">Proveedor</th>
@@ -3512,6 +3513,7 @@ function vDetalleModulo(m, usdArs, idx, presup) {
                     </tr>`).join('')}
                 </tbody>
             </table>` : `<div style="font-size:13px;color:#bbb;padding:4px 0">Sin proveedores asignados</div>`}
+            </div>
         </div>
         ${itemsHTML}${notesHTML}${filesHTML}</div>` : ''}
     </div>`;
@@ -5554,9 +5556,11 @@ function removeModProv(modId, idx) {
     if (el) el.innerHTML = vModProvTable(modId);
 }
 
-function showAddModProvModal(modId) {
+function showAddModProvModal(modId, presupId) {
     const existing = document.getElementById('amp-overlay');
     if (existing) existing.remove();
+    // Store presupId in dataset for use in addModProvFromModal
+    window._ampPresupId = presupId || null;
 
     const overlay = document.createElement('div');
     overlay.id = 'amp-overlay';
@@ -5623,12 +5627,11 @@ function showAddModProvModal(modId) {
 
 function addModProvFromModal(modId) {
     const supId = document.getElementById('amp-sup').value;
-    if (!supId) { toast('❌ Elegí un proveedor del directorio', 'error'); return; }
+    if (!supId) { toast('❌ Elegí un proveedor del directorio'); return; }
     const sup   = getSupplier(supId);
-    if (!sup)   { toast('❌ Proveedor no encontrado', 'error'); return; }
+    if (!sup)   { toast('❌ Proveedor no encontrado'); return; }
 
-    if (!sesProvs[modId]) sesProvs[modId] = [];
-    sesProvs[modId].push({
+    const entry = {
         id:           uid(),
         supplierId:   supId,
         supplierName: sup.name,
@@ -5637,11 +5640,54 @@ function addModProvFromModal(modId) {
         monto:        parseFloat(document.getElementById('amp-monto').value) || 0,
         plazo:        document.getElementById('amp-plazo').value || '',
         nota:         document.getElementById('amp-nota').value.trim(),
-    });
+    };
+
+    const presupId = window._ampPresupId;
+
+    if (presupId) {
+        // Llamado desde vDetalle — guardar directo en el presupuesto
+        const p = plist.find(x => x.id === presupId);
+        if (!p) { toast('❌ Presupuesto no encontrado'); return; }
+        const mod = (p.modules || []).find(m => m.id === modId);
+        if (!mod) { toast('❌ Módulo no encontrado'); return; }
+        if (!mod.proveedores) mod.proveedores = [];
+        mod.proveedores.push(entry);
+        saveDB();
+
+        // Re-render la tabla de proveedores en el detalle
+        const el = document.getElementById('det-prov-' + modId);
+        if (el) {
+            const provs = mod.proveedores;
+            el.innerHTML = provs.length > 0
+                ? `<table style="width:100%;border-collapse:collapse;font-size:13px">
+                    <thead><tr style="border-bottom:1px solid #eee">
+                        <th style="text-align:left;padding:5px 8px;font-size:11px;color:#aaa;font-weight:600;text-transform:uppercase">Proveedor</th>
+                        <th style="text-align:left;padding:5px 8px;font-size:11px;color:#aaa;font-weight:600;text-transform:uppercase">Estado</th>
+                        <th style="text-align:left;padding:5px 8px;font-size:11px;color:#aaa;font-weight:600;text-transform:uppercase">Monto</th>
+                        <th style="text-align:left;padding:5px 8px;font-size:11px;color:#aaa;font-weight:600;text-transform:uppercase">Plazo</th>
+                        <th style="text-align:left;padding:5px 8px;font-size:11px;color:#aaa;font-weight:600;text-transform:uppercase">Nota</th>
+                    </tr></thead>
+                    <tbody>${provs.map(pv => `
+                        <tr style="border-bottom:1px solid #f5f5f5">
+                            <td style="padding:7px 8px;font-weight:500;font-size:14px">${esc(pv.supplierName||'—')}</td>
+                            <td style="padding:7px 8px">${estadoPill(pv.estado)}</td>
+                            <td style="padding:7px 8px;font-size:13px">${pv.monto ? (pv.moneda||'ARS') + ' ' + Math.round(pv.monto).toLocaleString('es-AR') : '—'}</td>
+                            <td style="padding:7px 8px;font-size:13px;color:#777">${pv.plazo ? fDate(pv.plazo) : '—'}</td>
+                            <td style="padding:7px 8px;font-size:13px;color:#777">${esc(pv.nota||'—')}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                  </table>`
+                : `<div style="font-size:13px;color:#bbb;padding:4px 0">Sin proveedores asignados</div>`;
+        }
+    } else {
+        // Llamado desde el estimador — sesión en memoria
+        if (!sesProvs[modId]) sesProvs[modId] = [];
+        sesProvs[modId].push(entry);
+        const el = document.getElementById('mprov-' + modId);
+        if (el) el.innerHTML = vModProvTable(modId);
+    }
 
     document.getElementById('amp-overlay').remove();
-    const el = document.getElementById('mprov-' + modId);
-    if (el) el.innerHTML = vModProvTable(modId);
     toast('✅ Proveedor agregado al módulo');
 }
 
