@@ -52,6 +52,13 @@
         .nav-item:hover { background: #f2f2f2; color: #111; }
         .nav-item.active { background: #0a0a0a; color: #fff; }
         .ni { font-size: 17px; width: 22px; text-align: center; }
+        .nav-sub-item {
+            display: flex; align-items: center; gap: 10px; padding: 9px 14px 9px 38px;
+            border-radius: 6px; cursor: pointer; color: #777; font-size: 14px;
+            font-weight: 500; transition: all .15s; margin-bottom: 1px; user-select: none;
+        }
+        .nav-sub-item:hover { background: #f2f2f2; color: #111; }
+        .nav-sub-item.active { background: #0a0a0a; color: #fff; }
         .sb-footer { padding: 16px 24px; border-top: 1.5px solid #e0e0e0; font-size: 13px; color: #999; line-height: 1.7; }
 
         /* ── MAIN ── */
@@ -246,6 +253,7 @@
 
         /* ── BADGE ── */
         .badge { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+        .b-contactado { background: #dbeafe; color: #1d4ed8; }
         .b-abierto    { background: #fed7aa; color: #c2410c; }
         .b-presentado { background: #fef9c3; color: #a16207; }
         .b-aprobado   { background: #bbf7d0; color: #15803d; }
@@ -799,13 +807,20 @@
         </div>
     </div>
     <div class="sb-nav">
-        <div class="sb-sec">Principal</div>
         <div class="nav-item active" data-view="dashboard" onclick="nav('dashboard');closeSidebar()"><span class="ni">◧</span> Dashboard</div>
-        <div class="nav-item"        data-view="estimador" onclick="nav('estimador');closeSidebar()"><span class="ni">＋</span> Nuevo Presupuesto</div>
-        <div class="sb-sec">Gestión</div>
-        <div class="nav-item" data-view="historial"    onclick="nav('historial');closeSidebar()"><span class="ni">≡</span> Historial</div>
-        <div class="nav-item" data-view="proveedores"  onclick="nav('proveedores');closeSidebar()"><span class="ni">◈</span> Proveedores</div>
-        <div class="sb-sec">Equipo</div>
+
+        <div class="nav-item" onclick="toggleClientesMenu()" id="nav-clientes" style="justify-content:space-between;margin-top:4px">
+            <span style="display:flex;align-items:center;gap:12px"><span class="ni">👥</span> Clientes</span>
+            <span id="nav-clientes-arrow" style="font-size:11px;color:#aaa;transition:transform .2s">▶</span>
+        </div>
+        <div id="nav-clientes-sub" style="display:none">
+            <div class="nav-sub-item" data-view="estimador" onclick="presMode='prospecto';nav('estimador');closeSidebar()"><span style="font-size:13px">👤</span> Prospectos</div>
+            <div class="nav-sub-item" data-view="estimador-lic" onclick="presMode='licitacion';nav('estimador');closeSidebar()"><span style="font-size:13px">📄</span> Licitaciones</div>
+        </div>
+
+        <div class="sb-sec" style="margin-top:8px">Gestión</div>
+        <div class="nav-item" data-view="historial"   onclick="nav('historial');closeSidebar()"><span class="ni">≡</span> Historial</div>
+        <div class="nav-item" data-view="proveedores" onclick="nav('proveedores');closeSidebar()"><span class="ni">◈</span> Proveedores</div>
         <div class="sb-sec">Sistema</div>
         <div class="nav-item" data-view="config" onclick="nav('config');closeSidebar()"><span class="ni">⚙</span> Configuración</div>
     </div>
@@ -944,6 +959,7 @@ function unreadMentions(userId) {
 // ─── Per-session estimador state ───
 let view      = 'dashboard';
 let editId    = null;
+let presMode  = null; // null | 'prospecto' | 'licitacion'
 let modOn     = {};   // { modId: bool }
 let modExpand = {};   // { modId: bool }
 let sesItems  = {};   // { modId: [{id,desc,qty,unit,priceUSD}] }
@@ -1074,9 +1090,15 @@ function saveCFG() { localStorage.setItem(CFG, JSON.stringify(cfg));   }
 function nav(v, id = null) {
     view   = v;
     editId = id;
-    document.querySelectorAll('.nav-item').forEach(el =>
-        el.classList.toggle('active', el.dataset.view === v)
-    );
+    document.querySelectorAll('.nav-item, .nav-sub-item').forEach(el => {
+        let isActive = el.dataset.view === v;
+        // sub-items de Clientes usan data-view="estimador" o "estimador-lic"
+        if (v === 'estimador') {
+            if (el.dataset.view === 'estimador-lic') isActive = presMode === 'licitacion';
+            else if (el.dataset.view === 'estimador')  isActive = presMode !== 'licitacion';
+        }
+        el.classList.toggle('active', isActive);
+    });
     render();
 }
 
@@ -1084,13 +1106,17 @@ function render() {
     const app     = document.getElementById('app');
     const title   = document.getElementById('pg-title');
     const actions = document.getElementById('pg-actions');
-    const TITLES  = { dashboard:'Dashboard', estimador: editId?'Editar Presupuesto':'Nuevo Presupuesto',
+    const estTitle = editId ? 'Editar Presupuesto'
+                           : presMode === 'prospecto'  ? 'Nuevo Prospecto'
+                           : presMode === 'licitacion' ? 'Nueva Licitación'
+                           : 'Nuevo Presupuesto';
+    const TITLES  = { dashboard:'Dashboard', estimador: estTitle,
                       historial:'Historial', detalle:'Detalle', config:'Configuración', menciones:'Mis Menciones' };
     title.textContent = TITLES[view] || '';
 
     switch(view) {
         case 'dashboard':
-            actions.innerHTML = `<button class="btn btn-primary" onclick="nav('estimador')">+ Nuevo Presupuesto</button>`;
+            actions.innerHTML = '';
             app.innerHTML = vDashboard(); setTimeout(dashBuildChart, 50); break;
         case 'estimador':
             actions.innerHTML = '';
@@ -1205,6 +1231,7 @@ function vDashboard() {
 
     // ── Pipeline desde plist ───────────────────────
     const stMap = {
+        contactado: plist.filter(p => p.status === 'contactado'),
         abierto:    plist.filter(p => ['borrador','abierto'].includes(p.status||'borrador')),
         presentado: plist.filter(p => p.status === 'presentado'),
         aprobado:   plist.filter(p => p.status === 'aprobado'),
@@ -1214,6 +1241,23 @@ function vDashboard() {
     const convRate  = stMap.presentado.length > 0
         ? Math.round(stMap.aprobado.length / (stMap.presentado.length + stMap.aprobado.length) * 100)
         : 0;
+
+    // ── Funnels data ────────────────────────────────
+    // Funnel 1: Pipeline Comercial (todos los presupuestos)
+    const f1Map = {
+        contactado:   plist.filter(p => p.status === 'contactado'),
+        licitaciones: plist.filter(p => !!p.licitacion),
+        aprobado:     plist.filter(p => p.status === 'aprobado'),
+        perdido:      plist.filter(p => p.status === 'perdido'),
+    };
+    // Funnel 2: Pipeline Licitaciones (solo presupuestos con licitacion importada)
+    const licList = plist.filter(p => !!p.licitacion);
+    const f2Map = {
+        abierta:    licList.filter(p => !['presentado','aprobado','perdido'].includes(p.status)),
+        presentada: licList.filter(p => p.status === 'presentado'),
+        aprobada:   licList.filter(p => p.status === 'aprobado'),
+        perdida:    licList.filter(p => p.status === 'perdido'),
+    };
 
     // ── Obras cerradas (aprobado) por mes ──────────
     const obrasByMonth = Array(12).fill(0);
@@ -1269,65 +1313,83 @@ function vDashboard() {
           </tr>`).join('');
     }
 
-    // ── Funnel de pipeline ─────────────────────────
-    function vFunnel() {
-        const SCFG = [
-            { key:'abierto',    label:'Abierto',    color:'#6b7280', light:'#f3f4f6', bar:'#9ca3af', sw:100 },
-            { key:'presentado', label:'Presentado', color:'#d97706', light:'#fef9ee', bar:'#fbbf24', sw:76  },
-            { key:'perdido',    label:'Perdido',    color:'#ef4444', light:'#fef2f2', bar:'#f87171', sw:55  },
-            { key:'aprobado',   label:'Aprobado',   color:'#16a34a', light:'#f0fdf4', bar:'#4ade80', sw:36  },
+    // ── Dos Funnels ──────────────────────────────────
+    function vDosFunnels() {
+        const F1_CFG = [
+            { key:'contactado',   label:'Contactado',   color:'#0284c7', light:'#e0f2fe', sw:100 },
+            { key:'licitaciones', label:'Licitaciones', color:'#7c3aed', light:'#ede9fe', sw:76  },
+            { key:'aprobado',     label:'Aprobada',     color:'#16a34a', light:'#f0fdf4', sw:52  },
+            { key:'perdido',      label:'Perdida',      color:'#ef4444', light:'#fef2f2', sw:30  },
         ];
-        const totalCount = SCFG.reduce((s,c) => s + stMap[c.key].length, 0);
-        const svgW = 110, svgH = 248, slotH = svgH / 4;
-        let polys = '';
-        SCFG.forEach((c,i) => {
-            const nw = i < SCFG.length-1 ? SCFG[i+1].sw : Math.round(c.sw * 0.7);
-            const y  = i * slotH;
-            const x1 = (svgW-c.sw)/2, x2 = x1+c.sw, nx1 = (svgW-nw)/2, nx2 = nx1+nw;
-            polys += '<polygon points="'+x1+','+(y+1)+' '+x2+','+(y+1)+' '+nx2+','+(y+slotH-1)+' '+nx1+','+(y+slotH-1)+'" fill="'+c.color+'"/>';
-        });
-        const svgEl = '<svg width="'+svgW+'" height="'+svgH+'" viewBox="0 0 '+svgW+' '+svgH+'" xmlns="http://www.w3.org/2000/svg">'+polys+'</svg>';
+        const F2_CFG = [
+            { key:'abierta',    label:'Abierta',    color:'#6b7280', light:'#f3f4f6', sw:100 },
+            { key:'presentada', label:'Presentada', color:'#d97706', light:'#fef9ee', sw:76  },
+            { key:'aprobada',   label:'Aprobada',   color:'#16a34a', light:'#f0fdf4', sw:52  },
+            { key:'perdida',    label:'Perdida',    color:'#ef4444', light:'#fef2f2', sw:30  },
+        ];
 
-        const rowsEl = SCFG.map(c => {
-            const arr  = stMap[c.key];
-            const ars  = pSumARS(arr);
-            const pct  = totalCount > 0 ? Math.round(arr.length / totalCount * 100) : 0;
-            return '<div style="background:'+c.light+';border-radius:8px;border-left:3px solid '+c.color+';padding:14px 18px;cursor:pointer" data-key="'+c.key+'" onclick="dashTogglePipe(this.dataset.key)">'
-                + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">'
-                + '<div style="display:flex;align-items:center;gap:12px">'
-                + '<span style="font-size:30px;font-weight:800;color:'+c.color+';line-height:1;min-width:36px">'+arr.length+'</span>'
-                + '<span style="font-size:13px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:.5px">'+c.label+'</span>'
+        function mkFunnelSvg(cfg, svgW, svgH) {
+            const slotH = svgH / cfg.length;
+            let polys = '';
+            cfg.forEach((c,i) => {
+                const nw = i < cfg.length-1 ? cfg[i+1].sw : Math.round(c.sw * 0.62);
+                const y  = i * slotH;
+                const x1 = (svgW-c.sw)/2, x2 = x1+c.sw;
+                const nx1 = (svgW-nw)/2,  nx2 = nx1+nw;
+                polys += '<polygon points="'+x1+','+(y+1)+' '+x2+','+(y+1)+' '+nx2+','+(y+slotH-1)+' '+nx1+','+(y+slotH-1)+'" fill="'+c.color+'" opacity="0.9"/>';
+            });
+            return '<svg width="'+svgW+'" height="'+svgH+'" viewBox="0 0 '+svgW+' '+svgH+'" xmlns="http://www.w3.org/2000/svg">'+polys+'</svg>';
+        }
+
+        function mkFunnelPanel(cfg, dataMap, title, subtitle, funnelId) {
+            const svgW = 80, svgH = 192;
+            const svgEl = mkFunnelSvg(cfg, svgW, svgH);
+            const total = cfg.reduce((s,c) => s + (dataMap[c.key]||[]).length, 0);
+
+            const rowsEl = cfg.map(c => {
+                const arr = dataMap[c.key] || [];
+                const pct = total > 0 ? Math.round(arr.length / total * 100) : 0;
+                const ars = pSumARS(arr);
+                return '<div style="background:'+c.light+';border-radius:7px;border-left:3px solid '+c.color+';padding:10px 13px;cursor:pointer;transition:opacity .15s"'
+                    + ' onclick="dashToggleFunnel(\''+funnelId+'\',\''+c.key+'\')">'
+                    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+                    + '<div style="display:flex;align-items:center;gap:9px">'
+                    + '<span style="font-size:24px;font-weight:800;color:'+c.color+';line-height:1;min-width:26px">'+arr.length+'</span>'
+                    + '<span style="font-size:12px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:.3px">'+c.label+'</span>'
+                    + '</div>'
+                    + '<span style="font-size:12px;font-weight:700;color:#999">'+pct+'%</span>'
+                    + '</div>'
+                    + '<div style="display:flex;align-items:center;gap:8px">'
+                    + '<div style="flex:1;background:#e5e7eb;border-radius:3px;height:5px;overflow:hidden">'
+                    + '<div style="width:'+pct+'%;height:100%;background:'+c.color+';border-radius:3px"></div></div>'
+                    + (ars > 0 ? '<span style="font-size:11px;color:#aaa;white-space:nowrap">'+fARSkpi(ars)+'</span>' : '')
+                    + '</div></div>';
+            }).join('');
+
+            // Conversion metric
+            const lastTwo = cfg.slice(-2);
+            const lastArr = dataMap[lastTwo[0].key]||[];
+            const prevAll = cfg.slice(0,-1).reduce((s,c)=>s+(dataMap[c.key]||[]).length,0);
+            const convPct = prevAll > 0 ? Math.round((dataMap[lastTwo[1]?.key]||[]).length / prevAll * 100) : 0;
+
+            return '<div class="dash-chart-wrap" style="padding:18px 18px 14px">'
+                + '<div style="margin-bottom:14px">'
+                + '<div style="font-size:14px;font-weight:700;color:#111">'+title+'</div>'
+                + '<div style="font-size:12px;color:#aaa;margin-top:2px">'+subtitle+'</div>'
                 + '</div>'
-                + '<span style="font-size:18px;font-weight:800;color:#111">'+(ars > 0 ? fARSkpi(ars) : '—')+'</span>'
+                + '<div style="display:flex;gap:14px;align-items:flex-start">'
+                + '<div style="flex-shrink:0;margin-top:4px">'+svgEl+'</div>'
+                + '<div style="flex:1;display:flex;flex-direction:column;gap:6px">'+rowsEl+'</div>'
                 + '</div>'
-                + '<div style="display:flex;align-items:center;gap:10px">'
-                + '<div style="flex:1;background:#e5e7eb;border-radius:4px;height:7px;overflow:hidden">'
-                + '<div style="width:'+pct+'%;height:100%;background:'+c.bar+';border-radius:4px"></div></div>'
-                + '<span style="font-size:13px;font-weight:700;color:'+c.color+';min-width:64px;text-align:right">'+pct+'% del pipe</span>'
+                + '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center">'
+                + '<span style="font-size:12px;color:#aaa">'+total+' registro'+(total!==1?'s':'')+' totales</span>'
+                + (convPct > 0 ? '<span style="font-size:12px;font-weight:700;color:#16a34a">✓ '+convPct+'% conversión</span>' : '')
                 + '</div></div>';
-        }).join('');
+        }
 
-        const tot     = stMap.presentado.length + stMap.aprobado.length;
-        const totAll  = stMap.abierto.length + tot + stMap.perdido.length;
-        const cSend   = totAll > 0   ? Math.round(tot / totAll * 100) : 0;
-        const cClose  = tot > 0      ? Math.round(stMap.aprobado.length / tot * 100) : 0;
-        const cGlobal = totAll > 0   ? Math.round(stMap.aprobado.length / totAll * 100) : 0;
-        const metricsEl =
-            '<div style="flex:1;text-align:center"><div style="font-size:22px;font-weight:800;color:#d97706">'+cSend+'%</div><div style="font-size:11px;color:#888;margin-top:3px">Abierto → Presentado</div></div>'
-          + '<div style="flex:1;text-align:center"><div style="font-size:22px;font-weight:800;color:#16a34a">'+cClose+'%</div><div style="font-size:11px;color:#888;margin-top:3px">Presentado → Aprobado</div></div>'
-          + '<div style="flex:1;text-align:center"><div style="font-size:22px;font-weight:800;color:#ef4444">'+stMap.perdido.length+'</div><div style="font-size:11px;color:#888;margin-top:3px">Perdidos · '+(pSumARS(stMap.perdido)>0?fARSkpi(pSumARS(stMap.perdido)):'—')+'</div></div>'
-          + '<div style="flex:1;text-align:center"><div style="font-size:22px;font-weight:800;color:#16a34a">'+cGlobal+'%</div><div style="font-size:11px;color:#888;margin-top:3px">Conversión global</div></div>';
-
-        return '<div class="dash-chart-wrap mb6" style="padding:20px 22px">'
-            + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">'
-            + '<div style="font-size:14px;font-weight:700;color:#111">Pipeline de conversión</div>'
-            + '<div style="font-size:13px;color:#888">Conversión global: <strong style="color:#16a34a;font-size:14px">'+cGlobal+'%</strong></div>'
-            + '</div>'
-            + '<div style="display:flex;gap:20px;align-items:center">'
-            + '<div style="flex-shrink:0">'+svgEl+'</div>'
-            + '<div style="flex:1;display:flex;flex-direction:column;gap:7px">'+rowsEl+'</div>'
-            + '</div>'
-            + '<div style="display:flex;margin-top:16px;padding-top:14px;border-top:1px solid #f0f0f0">'+metricsEl+'</div>'
+        return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'
+            + mkFunnelPanel(F1_CFG, f1Map, '📋 Pipeline Comercial', 'Leads y contactos comerciales', 'f1')
+            + mkFunnelPanel(F2_CFG, f2Map, '📄 Pipeline Licitaciones', 'Presupuestos con licitación importada', 'f2')
             + '</div>';
     }
 
@@ -1433,9 +1495,9 @@ function vDashboard() {
         </div>
     </div>
 
-    <!-- Pipeline / Funnel -->
-    <div class="dash-sec-lbl">◈ Pipeline de presupuestos <span style="font-size:11px;font-weight:400;letter-spacing:0;text-transform:none;color:#bbb">— clic en una etapa para ver detalle</span></div>
-    ${vFunnel()}
+    <!-- Pipeline / Funnels -->
+    <div class="dash-sec-lbl">◈ Pipelines <span style="font-size:11px;font-weight:400;letter-spacing:0;text-transform:none;color:#bbb">— clic en una etapa para ver detalle</span></div>
+    ${vDosFunnels()}
 
     <!-- Pipeline detail (colapsable) -->
     <div id="dash-pipe-detail" style="display:none" class="dash-detail-panel">
@@ -1540,26 +1602,106 @@ function dashToggleObras() {
     if (card)  card.style.border    = _dashObrasOpen ? '1.5px solid #131313' : '1.5px solid #d0d0d0';
 }
 
+let _dashFunnelActive = null; // 'f1:key' o 'f2:key'
+
+function dashToggleFunnel(funnelId, key) {
+    const combo = funnelId + ':' + key;
+    if (_dashFunnelActive === combo) { dashClosePipe(); _dashFunnelActive = null; return; }
+    _dashFunnelActive = combo;
+    _dashPipeActive   = null;
+
+    const allLabels = {
+        // f1
+        contactado:   'Contactado',
+        licitaciones: 'Con Licitación',
+        // f2
+        abierta:      'Abierta',
+        presentada:   'Presentada',
+        aprobada:     'Aprobada',
+        perdida:      'Perdida',
+        // shared
+        aprobado:     'Aprobada',
+        perdido:      'Perdida',
+    };
+    const allColors = {
+        contactado:'#0284c7', licitaciones:'#7c3aed',
+        aprobado:'#16a34a', perdido:'#ef4444',
+        abierta:'#6b7280', presentada:'#d97706', aprobada:'#16a34a', perdida:'#ef4444',
+    };
+    const allBg = {
+        contactado:'#e0f2fe', licitaciones:'#ede9fe',
+        aprobado:'#f0fdf4', perdido:'#fef2f2',
+        abierta:'#f3f4f6', presentada:'#fef9ee', aprobada:'#f0fdf4', perdida:'#fef2f2',
+    };
+    const allTx = {
+        contactado:'#075985', licitaciones:'#5b21b6',
+        aprobado:'#14532d', perdido:'#7f1d1d',
+        abierta:'#374151', presentada:'#92400e', aprobada:'#14532d', perdida:'#7f1d1d',
+    };
+
+    const licList = plist.filter(p => !!p.licitacion);
+    const dataMap = {
+        f1: {
+            contactado:   plist.filter(p => p.status === 'contactado'),
+            licitaciones: plist.filter(p => !!p.licitacion),
+            aprobado:     plist.filter(p => p.status === 'aprobado'),
+            perdido:      plist.filter(p => p.status === 'perdido'),
+        },
+        f2: {
+            abierta:    licList.filter(p => !['presentado','aprobado','perdido'].includes(p.status)),
+            presentada: licList.filter(p => p.status === 'presentado'),
+            aprobada:   licList.filter(p => p.status === 'aprobado'),
+            perdida:    licList.filter(p => p.status === 'perdido'),
+        },
+    };
+
+    const arr   = (dataMap[funnelId] || {})[key] || [];
+    const color = allColors[key] || '#6b7280';
+    const bgCol = allBg[key]    || '#f3f4f6';
+    const txCol = allTx[key]    || '#374151';
+    const label = allLabels[key]|| key;
+
+    function fmtM(n) { return n >= 1000000 ? '$ '+(n/1000000).toFixed(1)+'M' : fARS(n); }
+
+    const titleEl = document.getElementById('dash-pipe-title');
+    if (titleEl) titleEl.innerHTML = `<span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;margin-right:6px"></span>${label.toUpperCase()} — ${arr.length} presupuesto${arr.length!==1?'s':''}`;
+
+    const rows = arr.length === 0
+        ? `<tr><td colspan="4" style="padding:16px;text-align:center;font-size:13px;color:#aaa">Sin presupuestos en esta etapa.</td></tr>`
+        : arr.map(p => `<tr class="clk" onclick="nav('detalle','${p.id}')" style="border-bottom:1px solid #f5f5f5;cursor:pointer">
+            <td style="padding:10px 14px"><strong style="color:#111">${esc(p.proyecto||'Sin nombre')}</strong><div style="font-size:11px;color:#aaa;margin-top:1px">${esc(p.cliente||'—')}</div></td>
+            <td style="padding:10px 8px"><span style="font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;background:${bgCol};color:${txCol}">${label}</span></td>
+            <td style="padding:10px 14px;text-align:right;font-weight:600;font-size:13px">${fUSD(p.totalUSD||0)}</td>
+            <td style="padding:10px 14px;text-align:right;font-size:12px;color:#888">${fmtM(p.totalARS||0)}</td>
+          </tr>`).join('');
+
+    const rowsEl = document.getElementById('dash-pipe-rows');
+    const panel  = document.getElementById('dash-pipe-detail');
+    if (rowsEl) rowsEl.innerHTML = rows;
+    if (panel)  panel.style.display = 'block';
+}
+
 function dashTogglePipe(key) {
     if (_dashPipeActive === key) { dashClosePipe(); return; }
-    _dashPipeActive = key;
+    _dashPipeActive   = key;
+    _dashFunnelActive = null;
     document.querySelectorAll('.dash-pipe-card').forEach(c => c.style.opacity = '0.4');
     const activeCard = document.getElementById('dpc-' + key);
     if (activeCard) activeCard.style.opacity = '1';
 
-    const labels = { abierto:'Abierto', presentado:'Presentado', aprobado:'Aprobado', perdido:'Perdido' };
-    const colors = { abierto:'#6b7280', presentado:'#d97706', aprobado:'#16a34a', perdido:'#dc2626' };
-    const bgCols = { abierto:'#f3f4f6', presentado:'#fffbeb', aprobado:'#f0fdf4', perdido:'#fef2f2' };
-    const txCols = { abierto:'#374151', presentado:'#92400e', aprobado:'#14532d', perdido:'#7f1d1d' };
+    const labels = { contactado:'Contactado', abierto:'Abierta', presentado:'Presentada', aprobado:'Aprobada', perdido:'Perdida' };
+    const colors = { contactado:'#0284c7', abierto:'#6b7280', presentado:'#d97706', aprobado:'#16a34a', perdido:'#dc2626' };
+    const bgCols = { contactado:'#e0f2fe', abierto:'#f3f4f6', presentado:'#fffbeb', aprobado:'#f0fdf4', perdido:'#fef2f2' };
+    const txCols = { contactado:'#075985', abierto:'#374151', presentado:'#92400e', aprobado:'#14532d', perdido:'#7f1d1d' };
 
     const stMap = {
+        contactado: plist.filter(p => p.status === 'contactado'),
         abierto:    plist.filter(p => ['borrador','abierto'].includes(p.status||'borrador')),
         presentado: plist.filter(p => p.status === 'presentado'),
         aprobado:   plist.filter(p => p.status === 'aprobado'),
         perdido:    plist.filter(p => p.status === 'perdido'),
     };
     const arr = stMap[key] || [];
-    const tc  = cfg.usdArs || 1350;
     function fmtM(n) { return n >= 1000000 ? '$ '+(n/1000000).toFixed(1)+'M' : fARS(n); }
 
     const titleEl = document.getElementById('dash-pipe-title');
@@ -1922,7 +2064,7 @@ function vEstimador() {
                 <div class="card-bd">
                     <div style="display:flex;gap:8px;margin-bottom:8px">
                         <button class="btn btn-secondary" style="flex:1" onclick="${editId ? "guardar('abierto')" : "nav('historial')"}">${editId ? 'Guardar cambios' : 'Cancelar'}</button>
-                        <button class="btn btn-success"   style="flex:1" onclick="guardar('${editId ? (plist.find(x=>x.id===editId)?.status||'abierto') : 'presentado'}')">${editId ? '💾 Guardar' : '💾 Guardar'}</button>
+                        <button class="btn btn-success"   style="flex:1" onclick="guardar('${editId ? (plist.find(x=>x.id===editId)?.status||'abierto') : presMode==='prospecto' ? 'contactado' : presMode==='licitacion' ? 'abierto' : 'presentado'}')">${editId ? '💾 Guardar' : '💾 Guardar'}</button>
                     </div>
                     ${editId ? `<button class="btn btn-secondary" style="width:100%" onclick="nav('detalle','${editId}')">Cancelar edición</button>` : ''}
                 </div>
@@ -2788,6 +2930,7 @@ function guardar(status) {
                      attachments:[], comments:[], activity:[actEntry] });
         saveDB(); toast('✅ Presupuesto guardado');
         initSes();
+        presMode = null;
         nav('historial');
     }
 }
@@ -2824,6 +2967,126 @@ function rHist(p) {
             <button class="btn btn-ghost btn-sm" onclick="delP('${p.id}')" title="Eliminar">🗑️</button>
         </td>
     </tr>`;
+}
+
+// ── Vista Prospectos ────────────────────────────────
+function vProspectos() {
+    const list = [...plist].filter(p => p.status === 'contactado').reverse();
+    const totalUSD = list.reduce((s,p) => s + (p.totalUSD||0), 0);
+    return `
+    <div class="card mb4" style="border-left:4px solid #0284c7;padding:18px 22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div>
+                <div style="font-size:15px;font-weight:700;color:#0284c7">Pipeline Comercial</div>
+                <div style="font-size:13px;color:#888;margin-top:2px">Contactos en etapa temprana — alimentan el Funnel Comercial del dashboard</div>
+            </div>
+            <div style="display:flex;gap:20px">
+                <div style="text-align:center">
+                    <div style="font-size:22px;font-weight:800;color:#0284c7">${list.length}</div>
+                    <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:.5px">prospectos</div>
+                </div>
+                ${totalUSD > 0 ? `<div style="text-align:center">
+                    <div style="font-size:22px;font-weight:800;color:#111">${fUSD(totalUSD)}</div>
+                    <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:.5px">potencial USD</div>
+                </div>` : ''}
+            </div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="tbl-wrap">
+            <table><thead><tr>
+                <th>#</th><th>Cliente</th><th>Proyecto</th>
+                <th class="tbl-hide-mobile">Tipo</th>
+                <th class="tbl-hide-mobile">M²</th>
+                <th>Total USD</th>
+                <th class="tbl-hide-mobile">Fecha</th>
+                <th></th>
+            </tr></thead>
+            <tbody>${list.length > 0 ? list.map(p => `
+                <tr class="clk" onclick="nav('detalle','${p.id}')">
+                    <td><strong>#${p.num}</strong></td>
+                    <td>${esc(p.cliente)}</td>
+                    <td>${esc(p.proyecto)}</td>
+                    <td class="tbl-hide-mobile" style="color:#888;font-size:14px">${tipoLbl(p.tipo)}</td>
+                    <td class="tbl-hide-mobile">${p.metros} m²</td>
+                    <td>${fPriP(priAmtP(p), p)}</td>
+                    <td class="tbl-hide-mobile" style="color:#888;font-size:14px">${fDate(p.fecha)}</td>
+                    <td onclick="event.stopPropagation()" style="white-space:nowrap">
+                        <button class="btn btn-ghost btn-sm" onclick="startEdit('${p.id}')" title="Editar">✏️</button>
+                        <button class="btn btn-ghost btn-sm" onclick="dupP('${p.id}')" title="Duplicar">📋</button>
+                        <button class="btn btn-ghost btn-sm" onclick="delP('${p.id}')" title="Eliminar">🗑️</button>
+                    </td>
+                </tr>`).join('') : `<tr><td colspan="8" style="padding:24px;text-align:center;color:#aaa">
+                    <div style="font-size:32px;margin-bottom:8px">👤</div>
+                    <div>Sin prospectos todavía</div>
+                    <div style="font-size:12px;margin-top:4px">Creá un presupuesto nuevo y asigná estado "Contactado"</div>
+                </td></tr>`}
+            </tbody></table>
+        </div>
+    </div>`;
+}
+
+// ── Vista Licitaciones ──────────────────────────────
+function vLicitaciones() {
+    const list = [...plist].filter(p => !!p.licitacion).reverse();
+    const stColors = { abierto:'#6b7280', presentado:'#d97706', aprobado:'#16a34a', perdido:'#ef4444', contactado:'#0284c7' };
+    const stLabels = { abierto:'Abierta', presentado:'Presentada', aprobado:'Aprobada', perdido:'Perdida', contactado:'Contactado' };
+    const totalUSD = list.reduce((s,p) => s + (p.totalUSD||0), 0);
+    return `
+    <div class="card mb4" style="border-left:4px solid #7c3aed;padding:18px 22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div>
+                <div style="font-size:15px;font-weight:700;color:#7c3aed">Pipeline Licitaciones</div>
+                <div style="font-size:13px;color:#888;margin-top:2px">Presupuestos con planilla de licitación importada — alimentan el Funnel Licitaciones</div>
+            </div>
+            <div style="display:flex;gap:20px">
+                <div style="text-align:center">
+                    <div style="font-size:22px;font-weight:800;color:#7c3aed">${list.length}</div>
+                    <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:.5px">licitaciones</div>
+                </div>
+                ${totalUSD > 0 ? `<div style="text-align:center">
+                    <div style="font-size:22px;font-weight:800;color:#111">${fUSD(totalUSD)}</div>
+                    <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:.5px">monto USD</div>
+                </div>` : ''}
+            </div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="tbl-wrap">
+            <table><thead><tr>
+                <th>#</th><th>Cliente</th><th>Proyecto</th>
+                <th class="tbl-hide-mobile">Archivo</th>
+                <th>Total USD</th>
+                <th>Estado</th>
+                <th class="tbl-hide-mobile">Fecha</th>
+                <th></th>
+            </tr></thead>
+            <tbody>${list.length > 0 ? list.map(p => {
+                const st = p.status || 'abierto';
+                const col = stColors[st] || '#6b7280';
+                const lbl = stLabels[st] || st;
+                return `<tr class="clk" onclick="nav('detalle','${p.id}')">
+                    <td><strong>#${p.num}</strong></td>
+                    <td>${esc(p.cliente)}</td>
+                    <td>${esc(p.proyecto)}</td>
+                    <td class="tbl-hide-mobile" style="font-size:12px;color:#888;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.licitacion.fileName)}">📄 ${esc(p.licitacion.fileName)}</td>
+                    <td>${fPriP(priAmtP(p), p)}</td>
+                    <td><span style="font-size:11px;padding:2px 9px;border-radius:20px;font-weight:600;background:${col}22;color:${col}">${lbl}</span></td>
+                    <td class="tbl-hide-mobile" style="color:#888;font-size:14px">${fDate(p.fecha)}</td>
+                    <td onclick="event.stopPropagation()" style="white-space:nowrap">
+                        <button class="btn btn-ghost btn-sm" onclick="matchLicitacionWithSuppliers('${p.id}')" title="Cotizar con proveedores">🔍</button>
+                        <button class="btn btn-ghost btn-sm" onclick="exportLicitacionFinal('${p.id}')" title="Exportar licitación final">📤</button>
+                        <button class="btn btn-ghost btn-sm" onclick="nav('detalle','${p.id}')" title="Ver detalle">👁️</button>
+                    </td>
+                </tr>`;
+            }).join('') : `<tr><td colspan="8" style="padding:24px;text-align:center;color:#aaa">
+                <div style="font-size:32px;margin-bottom:8px">📄</div>
+                <div>Sin licitaciones importadas</div>
+                <div style="font-size:12px;margin-top:4px">Abrí un presupuesto e importá la planilla del cliente</div>
+            </td></tr>`}
+            </tbody></table>
+        </div>
+    </div>`;
 }
 
 function filterTbl(q) {
@@ -2884,7 +3147,7 @@ function vDetalle(id) {
     const p = plist.find(x => x.id === id);
     if (!p) return `<div class="empty"><h3>Presupuesto no encontrado</h3></div>`;
 
-    const sts  = ['abierto','presentado','aprobado','perdido'];
+    const sts  = ['contactado','abierto','presentado','aprobado','perdido'];
     const ci   = sts.indexOf(p.status);
     // Show modules with sub > 0 OR with items (licitaciones start at $0)
     const mods = (p.modules||[]).filter(m => m.on !== false && (m.sub > 0 || (m.items||[]).length > 0));
@@ -4408,7 +4671,7 @@ function clearAll() {
 //  HELPERS
 // ═══════════════════════════════════════════════════
 function statusLbl(s) {
-    return { abierto:'Abierto', presentado:'Presentado', aprobado:'Aprobado', perdido:'Perdido' }[s] || s;
+    return { contactado:'Contactado', abierto:'Abierta', presentado:'Presentada', aprobado:'Aprobada', perdido:'Perdida' }[s] || s;
 }
 function tipoLbl(t) {
     return {local:'Local Comercial',oficina:'Oficina / Corp.',gastronomia:'Gastronomía',otro:'Otro'}[t] || t || '—';
@@ -4520,6 +4783,14 @@ function closeSidebar() {
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sb-overlay').classList.remove('open');
     document.body.style.overflow = '';
+}
+
+function toggleClientesMenu() {
+    const sub   = document.getElementById('nav-clientes-sub');
+    const arrow = document.getElementById('nav-clientes-arrow');
+    const open  = sub.style.display === 'block';
+    sub.style.display   = open ? 'none' : 'block';
+    arrow.style.transform = open ? '' : 'rotate(180deg)';
 }
 
 // ═══════════════════════════════════════════════════
