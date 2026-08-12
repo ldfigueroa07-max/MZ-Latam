@@ -205,7 +205,7 @@
         .ii:hover  { border-color: #ddd; background: #fff; }
         .ii:focus  { border-color: var(--dark); background: #fff; }
         .ii.num    { text-align: right; width: 90px; }
-        .ii.price  { text-align: right; width: 110px; }
+        .ii.price  { text-align: right; width: 85px; }
         .ii.desc   { min-width: 200px; }
         .ii-unit {
             padding: 7px 8px; border: 1px solid transparent; border-radius: 5px;
@@ -586,7 +586,7 @@
             .items-table td { padding: 6px 6px; }
             .ii.desc { min-width: 120px; }
             .ii.num  { width: 64px; }
-            .ii.price{ width: 80px; }
+            .ii.price{ width: 65px; }
             .ii-unit { width: 72px; }
 
             /* Result panel */
@@ -1023,7 +1023,8 @@ function addRubroToSes(catId) {
             desc:     pItem.descripcion || '',
             qty:      pItem.cantidad    || 1,
             unit:     unit,
-            priceUSD: (pItem.precioMat  || 0) + (pItem.precioMO || 0)
+            priceMat: pItem.precioMat   || 0,
+            priceMO:  pItem.precioMO    || 0
         };
     });
     sesFiles[m.id]  = [];
@@ -1203,7 +1204,7 @@ function modTotal(modId, metros) {
     if (!modOn[modId]) return 0;
     const items = sesItems[modId] || [];
     if (items.length > 0) {
-        return items.reduce((s,i) => s + (parseFloat(i.qty)||0) * (parseFloat(i.priceUSD)||0), 0);
+        return items.reduce((s,i) => s + (parseFloat(i.qty)||0) * ((parseFloat(i.priceMat??i.priceUSD??0)||0)+(parseFloat(i.priceMO)||0)), 0);
     }
     const m = sesModules.find(x => x.id === modId) || cfg.modules.find(x => x.id === modId);
     return (m?.costUSD || 0) * (parseFloat(metros) || 0);
@@ -2109,12 +2110,13 @@ function vModRow(m) {
                 <table class="items-table">
                     <thead>
                         <tr>
-                            <th style="width:38%">Descripción</th>
-                            <th style="width:10%">Cant.</th>
-                            <th style="width:12%">Unidad</th>
-                            <th style="width:14%">Precio ${priLbl()}</th>
+                            <th style="width:30%">Descripción</th>
+                            <th style="width:8%">Cant.</th>
+                            <th style="width:9%">Un.</th>
+                            <th style="width:12%">P.Mat ${priLbl()}</th>
+                            <th style="width:12%">P.MO ${priLbl()}</th>
                             <th style="width:16%">Subtotal</th>
-                            <th style="width:10%"></th>
+                            <th style="width:13%"></th>
                         </tr>
                     </thead>
                     <tbody id="it-${m.id}">
@@ -2174,7 +2176,9 @@ function vModRow(m) {
 
 // ─── Render one item row ───
 function vItemRow(modId, item) {
-    const sub  = (parseFloat(item.qty)||0) * (parseFloat(item.priceUSD)||0);
+    const pm   = parseFloat(item.priceMat ?? item.priceUSD ?? 0) || 0;
+    const pmo  = parseFloat(item.priceMO) || 0;
+    const sub  = (parseFloat(item.qty)||0) * (pm + pmo);
     const opts = UNITS.map(u => `<option value="${u}" ${u===item.unit?'selected':''}>${u}</option>`).join('');
     return `
     <tr id="ir-${item.id}">
@@ -2183,8 +2187,10 @@ function vItemRow(modId, item) {
         <td><input class="ii num" type="number" min="0" step="0.01" value="${item.qty||''}" placeholder="0"
             oninput="updItem('${modId}','${item.id}','qty',this.value)"></td>
         <td><select class="ii-unit" onchange="updItem('${modId}','${item.id}','unit',this.value)">${opts}</select></td>
-        <td><input class="ii price" type="number" min="0" step="0.01" value="${item.priceUSD||''}" placeholder="0.00"
-            oninput="updItem('${modId}','${item.id}','priceUSD',this.value)"></td>
+        <td><input class="ii price" type="number" min="0" step="0.01" value="${pm||''}" placeholder="0.00"
+            oninput="updItem('${modId}','${item.id}','priceMat',this.value)" title="Precio materiales"></td>
+        <td><input class="ii price" type="number" min="0" step="0.01" value="${pmo||''}" placeholder="0.00"
+            oninput="updItem('${modId}','${item.id}','priceMO',this.value)" title="Mano de obra"></td>
         <td class="item-sub ${sub===0?'zero':''}" id="is-${item.id}">${sub>0 ? fPri(sub) : '—'}</td>
         <td style="text-align:center">
             <button class="btn btn-ghost btn-sm" title="Eliminar fila" onclick="rmItem('${modId}','${item.id}')">✕</button>
@@ -2217,7 +2223,7 @@ function addItem(modId) {
     const arrow = document.querySelector(`#mr-${modId} .mod-arrow`);
     if (arrow) arrow.classList.add('open');
 
-    const item = { id: uid(), desc: '', qty: 1, unit: 'm²', priceUSD: 0 };
+    const item = { id: uid(), desc: '', qty: 1, unit: 'm²', priceMat: 0, priceMO: 0 };
     sesItems[modId] = sesItems[modId] || [];
     sesItems[modId].push(item);
 
@@ -2244,7 +2250,7 @@ function rmItem(modId, itemId) {
     if (sesItems[modId].length === 0) {
         const tbody = document.getElementById(`it-${modId}`);
         const m = cfg.modules.find(x => x.id === modId);
-        if (tbody) tbody.innerHTML = `<tr id="ph-${modId}"><td colspan="6" class="items-placeholder">
+        if (tbody) tbody.innerHTML = `<tr id="ph-${modId}"><td colspan="7" class="items-placeholder">
             Sin ítems — el módulo usa tarifa base (${fUSD(m?.costUSD||0)}/m²).
         </td></tr>`;
     }
@@ -2350,8 +2356,41 @@ async function addModFiles(modId, input) {
             // Parse Excel → auto-populate items + notes
             const { rows, rawText } = await parseXlsFile(file);
             if (rows.length) {
-                importParsedRows(modId, rows);
-                parsedCount += rows.length;
+                // If the file has a Rubro column (plantilla dinámica), route items to matching modules automatically.
+                // Otherwise fall back to the selected module.
+                const hasRubro = rows.some(r => r.rubro && r.rubro.trim());
+                if (hasRubro) {
+                    // Group rows by rubro name
+                    const byRubro = {};
+                    rows.forEach(r => {
+                        const key = r.rubro.trim().toLowerCase();
+                        if (!byRubro[key]) byRubro[key] = [];
+                        byRubro[key].push(r);
+                    });
+                    // Match each rubro key to an active module in this session
+                    let matched = 0;
+                    (sesModules || []).forEach(m => {
+                        const mKey = (m.nombre || '').trim().toLowerCase();
+                        if (byRubro[mKey]) {
+                            importParsedRows(m.id, byRubro[mKey]);
+                            parsedCount += byRubro[mKey].length;
+                            matched += byRubro[mKey].length;
+                        }
+                    });
+                    // Any rows whose rubro didn't match a module → fall to the selected module
+                    const unmatched = rows.filter(r => {
+                        const key = r.rubro.trim().toLowerCase();
+                        return !(sesModules || []).some(m => (m.nombre||'').trim().toLowerCase() === key);
+                    });
+                    if (unmatched.length) {
+                        importParsedRows(modId, unmatched);
+                        parsedCount += unmatched.length;
+                    }
+                    if (matched > 0) toast(`✅ ${matched} ítems asignados automáticamente por rubro`);
+                } else {
+                    importParsedRows(modId, rows);
+                    parsedCount += rows.length;
+                }
             }
             appendModNote(modId, file.name, rawText);
             dataUrl = null;
@@ -2398,8 +2437,9 @@ async function parseTxtFile(file) {
                           : rawUnitTxt === 'hr' || rawUnitTxt === 'h' ? 'hs'
                           : rawUnitTxt;
         const unit     = UNITS.includes(normUnitTxt) ? normUnitTxt : 'un';
-        const priceUSD = parseFloat((cols[3]||cols[1]||'').replace(',','.').replace(/[^0-9.]/g,'')) || 0;
-        rows.push({ desc, qty, unit, priceUSD });
+        const priceMat = parseFloat((cols[3]||cols[1]||'').replace(',','.').replace(/[^0-9.]/g,'')) || 0;
+        const priceMO  = parseFloat((cols[4]||'').replace(',','.').replace(/[^0-9.]/g,'')) || 0;
+        rows.push({ desc, qty, unit, priceMat, priceMO });
     }
     return { rows, rawText };
 }
@@ -2423,37 +2463,58 @@ async function parseXlsFile(file) {
     // Build human-readable rawText (tab-separated table)
     const rawText = data.map(row => row.map(c => String(c)).join('\t')).join('\n');
 
-    // Auto-detect header row
+    // Auto-detect header row and column positions
     let startIdx = 0;
+    let colRubro = -1, colCod = -1, colDesc = 0, colQty = 1, colUnit = 2, colMat = 3, colMO = 4, colComent = -1;
+
     for (let i = 0; i < Math.min(data.length, 5); i++) {
-        const row = data[i].map(c => String(c).toLowerCase());
-        if (row.some(c => ['desc','concepto','item','detalle','nombre','rubro'].some(k => c.includes(k)))) {
+        const row = data[i].map(c => String(c).toLowerCase().trim());
+        const hasHeader = row.some(c => ['desc','concepto','detalle','nombre','rubro','descripcion','descripción'].some(k => c.includes(k)));
+        if (hasHeader) {
             startIdx = i + 1;
+            // Map columns by header name so any order works.
+            // Note: "rubro" is checked FIRST (before desc) to avoid it being captured as a description column.
+            row.forEach((c, idx) => {
+                if (['rubro','modulo','módulo','categoria','categoría'].some(k => c === k || c.startsWith(k)))           colRubro  = idx;
+                else if (['cod','codigo','código','item','#'].some(k => c.includes(k)))                                  colCod    = idx;
+                else if (['desc','concepto','detalle','nombre'].some(k => c.includes(k)))                                colDesc   = idx;
+                else if (['cant','qty','cantidad'].some(k => c.includes(k)))                                             colQty    = idx;
+                else if (['unid','unit','und'].some(k => c.includes(k)))                                                 colUnit   = idx;
+                else if (['pu.mat','p.mat','mat','precio mat','precio unit'].some(k => c.includes(k)))                   colMat    = idx;
+                else if (['pmo','p.mo','mano','mo'].some(k => c.includes(k)))                                            colMO     = idx;
+                else if (['coment','observ','nota','note'].some(k => c.includes(k)))                                     colComent = idx;
+            });
             break;
         }
     }
 
+    const normalizeUnit = rawUnit => {
+        const u = rawUnit.trim().toLowerCase();
+        if (u === 'm2' || u === 'sqm' || u === 'm 2') return 'm²';
+        if (u === 'm3' || u === 'cbm' || u === 'm 3') return 'm³';
+        if (u === 'ml' || u === 'lm'  || u === 'm')   return 'ml';
+        if (u === 'un' || u === 'u'   || u === 'und'  || u === 'unid') return 'un';
+        if (u === 'gl' || u === 'global')              return 'gl';
+        if (u === 'hs' || u === 'hr'  || u === 'h')   return 'hs';
+        if (u === 'kg')  return 'kg';
+        if (u === 'lote') return 'lote';
+        return u;
+    };
+
     for (let i = startIdx; i < data.length; i++) {
         const row = data[i];
         if (!row || !row.length) continue;
-        const desc     = String(row[0] || '').trim();
+        const desc = String(row[colDesc] || '').trim();
         if (!desc) continue;
-        const qty      = parseFloat(String(row[1]||'1').replace(',','.')) || 1;
-        const rawUnit  = String(row[2]||'').trim().toLowerCase();
-        // Normalize common variants (Revit exports m2, M2, sqm, etc.)
-        const normUnit = rawUnit === 'm2' || rawUnit === 'sqm' || rawUnit === 'm 2' ? 'm²'
-                       : rawUnit === 'm3' || rawUnit === 'cbm' || rawUnit === 'm 3' ? 'm³'
-                       : rawUnit === 'ml' || rawUnit === 'lm'  || rawUnit === 'm'   ? 'ml'
-                       : rawUnit === 'un' || rawUnit === 'u'   || rawUnit === 'und' || rawUnit === 'unid' ? 'un'
-                       : rawUnit === 'gl' || rawUnit === 'global' ? 'gl'
-                       : rawUnit === 'hs' || rawUnit === 'hr'  || rawUnit === 'h'   ? 'hs'
-                       : rawUnit === 'kg' ? 'kg'
-                       : rawUnit === 'lote' ? 'lote'
-                       : rawUnit;
+        const cod      = colCod >= 0 ? String(row[colCod] || '').trim() : '';
+        const qty      = parseFloat(String(row[colQty]||'1').replace(',','.')) || 1;
+        const normUnit = normalizeUnit(String(row[colUnit]||''));
         const unit     = UNITS.includes(normUnit) ? normUnit : 'un';
-        const priceRaw = String(row[3] || row[1] || '0').replace(',','.').replace(/[^0-9.]/g,'');
-        const priceUSD = parseFloat(priceRaw) || 0;
-        rows.push({ desc, qty, unit, priceUSD });
+        const priceMat  = parseFloat(String(row[colMat]||'0').replace(',','.').replace(/[^0-9.]/g,'')) || 0;
+        const priceMO   = parseFloat(String(row[colMO] ||'0').replace(',','.').replace(/[^0-9.]/g,'')) || 0;
+        const comentario = colComent >= 0 ? String(row[colComent] || '').trim() : '';
+        const rubro      = colRubro  >= 0 ? String(row[colRubro]  || '').trim() : '';
+        rows.push({ cod, desc, qty, unit, priceMat, priceMO, comentario, rubro });
     }
     return { rows, rawText };
 }
@@ -2489,7 +2550,7 @@ function importParsedRows(modId, rows) {
     if (ph) ph.remove();
 
     rows.forEach(r => {
-        const item = { id: uid(), desc: r.desc, qty: r.qty, unit: r.unit, priceUSD: r.priceUSD };
+        const item = { id: uid(), desc: r.desc, qty: r.qty, unit: r.unit, priceMat: r.priceMat??r.priceUSD??0, priceMO: r.priceMO??0 };
         sesItems[modId].push(item);
         if (tbody) tbody.insertAdjacentHTML('beforeend', vItemRow(modId, item));
     });
@@ -2561,7 +2622,7 @@ function updItem(modId, itemId, field, value) {
     item[field] = value;
 
     // Update subtotal cell live
-    const sub    = (parseFloat(item.qty)||0) * (parseFloat(item.priceUSD)||0);
+    const sub = (parseFloat(item.qty)||0) * ((parseFloat(item.priceMat??item.priceUSD??0)||0)+(parseFloat(item.priceMO)||0));
     const subEl  = document.getElementById(`is-${itemId}`);
     if (subEl) {
         subEl.textContent = sub > 0 ? fPri(sub) : '—';
@@ -3441,9 +3502,10 @@ function vDetalleModulo(m, usdArs, idx, presup) {
                     <tr style="background:#f0f0f0">
                         <th style="text-align:left;padding:10px 14px;font-weight:600;color:#444;border-bottom:1.5px solid #d0d0d0;letter-spacing:.3px;text-transform:uppercase;font-size:11px">Descripción</th>
                         <th style="text-align:center;padding:10px 10px;font-weight:600;color:#444;border-bottom:1.5px solid #d0d0d0;letter-spacing:.3px;text-transform:uppercase;font-size:11px;white-space:nowrap;width:70px">Cant.</th>
-                        <th style="text-align:center;padding:10px 10px;font-weight:600;color:#444;border-bottom:1.5px solid #d0d0d0;letter-spacing:.3px;text-transform:uppercase;font-size:11px;width:60px">Un.</th>
-                        <th style="text-align:right;padding:10px 14px;font-weight:600;color:#444;border-bottom:1.5px solid #d0d0d0;letter-spacing:.3px;text-transform:uppercase;font-size:11px;white-space:nowrap;width:130px">P. Unit.</th>
-                        <th style="text-align:right;padding:10px 14px;font-weight:600;color:#444;border-bottom:1.5px solid #d0d0d0;letter-spacing:.3px;text-transform:uppercase;font-size:11px;white-space:nowrap;width:130px">Subtotal</th>
+                        <th style="text-align:center;padding:10px 10px;font-weight:600;color:#444;border-bottom:1.5px solid #d0d0d0;letter-spacing:.3px;text-transform:uppercase;font-size:11px;width:55px">Un.</th>
+                        <th style="text-align:right;padding:10px 14px;font-weight:600;color:#444;border-bottom:1.5px solid #d0d0d0;letter-spacing:.3px;text-transform:uppercase;font-size:11px;white-space:nowrap;width:110px" title="Precio unitario materiales">P.Mat</th>
+                        <th style="text-align:right;padding:10px 14px;font-weight:600;color:#444;border-bottom:1.5px solid #d0d0d0;letter-spacing:.3px;text-transform:uppercase;font-size:11px;white-space:nowrap;width:110px" title="Precio unitario mano de obra">P.MO</th>
+                        <th style="text-align:right;padding:10px 14px;font-weight:600;color:#444;border-bottom:1.5px solid #d0d0d0;letter-spacing:.3px;text-transform:uppercase;font-size:11px;white-space:nowrap;width:120px">Subtotal</th>
                         <th style="width:30px;border-bottom:1.5px solid #d0d0d0"></th>
                     </tr>
                 </thead>
@@ -3531,16 +3593,23 @@ function toggleDetMod(bid) {
 // ── Desglose inline editing ───────────────────────────────────────────────
 
 function vDetItemRow(i, ri, modId, presup) {
-    const sub  = (parseFloat(i.qty)||0) * (parseFloat(i.priceUSD)||0);
+    const pm   = parseFloat(i.priceMat ?? i.priceUSD ?? 0) || 0;
+    const pmo  = parseFloat(i.priceMO) || 0;
+    const sub  = (parseFloat(i.qty)||0) * (pm + pmo);
     const pid  = presup.id;
+    const isARS = (presup?.moneda||'USD') === 'ARS';
+    const sym  = isARS ? '$ ' : '';
     const iSt  = 'width:100%;border:none;background:transparent;font-size:14px;padding:2px 4px;border-radius:3px;outline:none;box-sizing:border-box';
     const focOn  = "this.closest('td').style.background='#fffde7'";
     const focOff = "this.closest('td').style.background=''";
     return `<tr id="dmi-row-${i.id}" style="${ri%2===1?'background:#fafafa':''}">
-        <td style="padding:6px 12px;border-bottom:1px solid #efefef">
+        <td style="padding:4px 12px 4px;border-bottom:1px solid #efefef">
             <input data-field="desc" value="${esc(i.desc||'')}" placeholder="Descripción…"
                 style="${iSt};color:#222;min-width:100px"
                 onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','desc',this.value)">
+            <input data-field="comentario" value="${esc(i.comentario||'')}" placeholder="💬 Comentario…"
+                style="${iSt};font-size:11px;color:#888;font-style:italic;margin-top:1px"
+                onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','comentario',this.value)">
         </td>
         <td style="padding:6px 8px;border-bottom:1px solid #efefef;text-align:center">
             <input type="number" data-field="qty" value="${i.qty||0}" min="0" step="any"
@@ -3550,16 +3619,22 @@ function vDetItemRow(i, ri, modId, presup) {
         </td>
         <td style="padding:6px 8px;border-bottom:1px solid #efefef;text-align:center">
             <input data-field="unit" value="${esc(i.unit||'gl')}" placeholder="un"
-                style="${iSt};width:50px;text-align:center;color:#666"
+                style="${iSt};width:46px;text-align:center;color:#666"
                 onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','unit',this.value)">
         </td>
-        <td style="padding:6px 12px;border-bottom:1px solid #efefef;text-align:right;white-space:nowrap">
-            <span style="font-size:12px;color:#999;margin-right:2px">${(presup?.moneda||'USD')==='ARS'?'$':''}</span><input type="number" data-field="price" value="${i.priceUSD||0}" min="0" step="any"
-                style="${iSt};width:100px;text-align:right"
-                onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','priceUSD',this.value)"
+        <td style="padding:6px 8px;border-bottom:1px solid #efefef;text-align:right;white-space:nowrap">
+            <span style="font-size:11px;color:#999;margin-right:1px">${sym}</span><input type="number" data-field="pricemat" value="${pm||0}" min="0" step="any"
+                style="${iSt};width:88px;text-align:right" title="Precio materiales"
+                onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','priceMat',this.value)"
                 oninput="liveSubDet('${i.id}','${pid}')">
         </td>
-        <td id="dmi-sub-${i.id}" style="padding:6px 12px;border-bottom:1px solid #efefef;text-align:right;font-weight:700;color:#111;font-size:14px;white-space:nowrap">${(presup?.moneda||'USD')==='ARS' ? fARS2(sub) : fUSD2(sub)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #efefef;text-align:right;white-space:nowrap">
+            <span style="font-size:11px;color:#999;margin-right:1px">${sym}</span><input type="number" data-field="pricemo" value="${pmo||0}" min="0" step="any"
+                style="${iSt};width:88px;text-align:right" title="Mano de obra"
+                onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','priceMO',this.value)"
+                oninput="liveSubDet('${i.id}','${pid}')">
+        </td>
+        <td id="dmi-sub-${i.id}" style="padding:6px 12px;border-bottom:1px solid #efefef;text-align:right;font-weight:700;color:#111;font-size:14px;white-space:nowrap">${isARS ? fARS2(sub) : fUSD2(sub)}</td>
         <td style="padding:6px 4px;border-bottom:1px solid #efefef;text-align:center">
             <button onclick="rmDetItem('${pid}','${modId}','${i.id}')"
                 style="background:none;border:none;color:#ddd;cursor:pointer;font-size:14px;padding:2px 5px;border-radius:3px;line-height:1"
@@ -3571,9 +3646,10 @@ function vDetItemRow(i, ri, modId, presup) {
 function liveSubDet(itemId, presupId) {
     const row = document.getElementById('dmi-row-' + itemId);
     if (!row) return;
-    const qty   = parseFloat(row.querySelector('[data-field="qty"]')?.value)   || 0;
-    const price = parseFloat(row.querySelector('[data-field="price"]')?.value) || 0;
-    const sub   = qty * price;
+    const qty  = parseFloat(row.querySelector('[data-field="qty"]')?.value)       || 0;
+    const pmat = parseFloat(row.querySelector('[data-field="pricemat"]')?.value)  || 0;
+    const pmo  = parseFloat(row.querySelector('[data-field="pricemo"]')?.value)   || 0;
+    const sub  = qty * (pmat + pmo);
     const subEl = document.getElementById('dmi-sub-' + itemId);
     const p     = plist.find(x => x.id === presupId);
     if (subEl && p) subEl.textContent = (p.moneda||'USD')==='ARS' ? fARS2(sub) : fUSD2(sub);
@@ -3586,9 +3662,9 @@ function saveDetItem(presupId, modId, itemId, field, rawVal) {
     if (!mod)  return;
     const item = (mod.items || []).find(it => it.id === itemId);
     if (!item) return;
-    item[field] = (field === 'qty' || field === 'priceUSD') ? (parseFloat(rawVal) || 0) : rawVal;
+    item[field] = (field === 'qty' || field === 'priceMat' || field === 'priceMO') ? (parseFloat(rawVal) || 0) : rawVal;
     // Recalc module sub
-    mod.sub = (mod.items||[]).reduce((s,it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.priceUSD)||0), 0);
+    mod.sub = (mod.items||[]).reduce((s,it) => s + (parseFloat(it.qty)||0)*((parseFloat(it.priceMat??it.priceUSD??0)||0)+(parseFloat(it.priceMO)||0)), 0);
     _recalcPresupTotals(pi);
     saveDB();
     // Update module total badge
@@ -3604,7 +3680,7 @@ function addDetItem(presupId, modId) {
     const mod = (plist[pi].modules||[]).find(m => m.id === modId);
     if (!mod)  return;
     if (!mod.items) mod.items = [];
-    const newItem = { id: Date.now().toString(36)+Math.random().toString(36).slice(2,5), desc:'', qty:1, unit:'gl', priceUSD:0 };
+    const newItem = { id: Date.now().toString(36)+Math.random().toString(36).slice(2,5), desc:'', qty:1, unit:'gl', priceMat:0, priceMO:0 };
     mod.items.push(newItem);
     saveDB();
     const tbody = document.getElementById('dmi-tbody-' + modId);
@@ -3623,7 +3699,7 @@ function rmDetItem(presupId, modId, itemId) {
     const mod = (plist[pi].modules||[]).find(m => m.id === modId);
     if (!mod)  return;
     mod.items = (mod.items||[]).filter(it => it.id !== itemId);
-    mod.sub   = (mod.items||[]).reduce((s,it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.priceUSD)||0), 0);
+    mod.sub   = (mod.items||[]).reduce((s,it) => s + (parseFloat(it.qty)||0)*((parseFloat(it.priceMat??it.priceUSD??0)||0)+(parseFloat(it.priceMO)||0)), 0);
     _recalcPresupTotals(pi);
     saveDB();
     document.getElementById('dmi-row-' + itemId)?.remove();
@@ -3957,21 +4033,51 @@ function vConfig() {
                     </div>
                 </div>
             </div>
-            <!-- Backup -->
-            <div class="card">
-                <div class="card-hd"><span class="card-title">Datos & Backup</span></div>
+
+            <!-- Plantilla Excel -->
+            <div class="card mb4">
+                <div class="card-hd">
+                    <div>
+                        <span class="card-title">📊 Plantilla Excel</span>
+                        <span class="card-sub">Descargá, completá precios e importá de vuelta</span>
+                    </div>
+                </div>
                 <div class="card-bd">
-                    <div style="font-size:14px;color:#888;line-height:1.8;margin-bottom:14px">
-                        Los datos se almacenan localmente en este navegador.<br>
-                        Exportá backups periódicamente.<br><br>
-                        <strong>Presupuestos guardados: ${plist.length}</strong>
+                    <div style="font-size:13px;color:#888;line-height:1.7;margin-bottom:16px">
+                        Descargá la plantilla con todos los rubros e ítems actuales.<br>
+                        Completá los precios en Excel y volvé a importarla para actualizar la plantilla global.
                     </div>
-                    <div style="display:flex;flex-direction:column;gap:7px">
-                        <button class="btn btn-secondary" onclick="exportJSON()">📤 Exportar datos</button>
-                        <button class="btn btn-secondary" onclick="document.getElementById('imp').click()">📥 Importar datos</button>
-                        <button class="btn btn-danger"    onclick="clearAll()">🗑️ Borrar todo</button>
+                    <div style="display:flex;flex-direction:column;gap:8px">
+                        <button class="btn btn-secondary" onclick="downloadPlantillaXlsx()">
+                            📥 Descargar plantilla Excel
+                        </button>
+                        <button class="btn btn-secondary" onclick="document.getElementById('imp-plt-xlsx').click()">
+                            📤 Importar Excel → actualizar plantilla
+                        </button>
                     </div>
-                    <input type="file" id="imp" style="display:none" accept=".json" onchange="importJSON(this)">
+                    <input type="file" id="imp-plt-xlsx" style="display:none" accept=".xlsx,.xls" onchange="importPlantillaXlsx(this)">
+                </div>
+            </div>
+
+            <!-- Backup técnico (colapsado) -->
+            <div class="card">
+                <div class="card-hd" onclick="toggleBackupPanel()" style="cursor:pointer;user-select:none">
+                    <span class="card-title" style="color:#aaa;font-size:13px">🔧 Backup técnico</span>
+                    <span id="backup-arrow" style="color:#ccc;font-size:16px;margin-left:auto;transition:transform .2s">›</span>
+                </div>
+                <div id="backup-panel" style="display:none">
+                    <div class="card-bd">
+                        <div style="font-size:12px;color:#aaa;line-height:1.7;margin-bottom:12px">
+                            Backup completo de la app en formato JSON.<br>
+                            <strong style="color:#888">Presupuestos guardados: ${plist.length}</strong>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:7px">
+                            <button class="btn btn-secondary btn-sm" onclick="exportJSON()">📤 Exportar JSON</button>
+                            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('imp').click()">📥 Importar JSON</button>
+                            <button class="btn btn-danger btn-sm"    onclick="clearAll()">🗑️ Borrar todo</button>
+                        </div>
+                        <input type="file" id="imp" style="display:none" accept=".json" onchange="importJSON(this)">
+                    </div>
                 </div>
             </div>
         </div>
@@ -4191,6 +4297,12 @@ function plantillaCatRow(cat, ci) {
         <div id="plt-body-${ci}" style="display:${isOpen?'block':'none'}">
             <!-- Category meta row -->
             <div style="display:flex;gap:10px;align-items:flex-end;padding:10px 18px 8px;background:#fafafa;border-top:1px solid #f0f0f0;flex-wrap:wrap">
+                <div style="width:70px;flex-shrink:0">
+                    <label style="font-size:12px;color:#aaa;font-weight:600;text-transform:uppercase;letter-spacing:.7px">Código</label>
+                    <input class="finput" id="plt-catid-${ci}" type="text" value="${esc(cat.id)}"
+                        title="Código del rubro (editable)"
+                        style="margin-top:4px;font-size:14px;font-weight:700;font-family:monospace;text-align:center;color:${palette.text}">
+                </div>
                 <div style="flex:2;min-width:180px">
                     <label style="font-size:12px;color:#aaa;font-weight:600;text-transform:uppercase;letter-spacing:.7px">Nombre del rubro</label>
                     <input class="finput" id="plt-cn-${ci}" type="text" value="${esc(cat.nombre)}"
@@ -4260,7 +4372,11 @@ function plantillaItemRow(item, ci, ii) {
     const fmtARS = n => n ? '$ ' + Math.round(n).toLocaleString('es-AR') : '—';
     return `
     <tr id="plt-item-${ci}-${ii}" style="border-bottom:1px solid #f5f5f5;transition:background .12s" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
-        <td style="padding:7px 12px;color:#bbb;font-size:12px;font-weight:600;font-family:monospace">${esc(item.id)}</td>
+        <td style="padding:4px 8px">
+            <input class="finput" id="plt-id-${ci}-${ii}" type="text" value="${esc(item.id)}"
+                title="Código del ítem (editable)"
+                style="font-size:12px;font-family:monospace;font-weight:600;color:#6366f1;padding:3px 6px;width:72px;text-align:center">
+        </td>
         <td style="padding:7px 8px">
             <input class="finput" id="plt-d-${ci}-${ii}" type="text" value="${esc(item.descripcion)}"
                 style="font-size:13px;padding:4px 7px;width:100%;min-width:200px">
@@ -4470,17 +4586,20 @@ function togglePlantillaCat(ci) {
 
 function savePlantillaForm() {
     plantilla.forEach((cat, ci) => {
-        const nameEl = document.getElementById('plt-cn-'+ci);
-        const provEl = document.getElementById('plt-cp-'+ci);  // legacy (unused, kept for safety)
-        const umedEl = document.getElementById('plt-umed-'+ci);
-        if (nameEl) cat.nombre = nameEl.value.trim() || cat.nombre;
-        if (umedEl) cat.unidad = umedEl.value || 'm²';
+        const catIdEl = document.getElementById('plt-catid-'+ci);
+        const nameEl  = document.getElementById('plt-cn-'+ci);
+        const umedEl  = document.getElementById('plt-umed-'+ci);
+        if (catIdEl && catIdEl.value.trim()) cat.id = catIdEl.value.trim();
+        if (nameEl)  cat.nombre = nameEl.value.trim() || cat.nombre;
+        if (umedEl)  cat.unidad = umedEl.value || 'm²';
         cat.items.forEach((item, ii) => {
+            const idEl   = document.getElementById('plt-id-'+ci+'-'+ii);
             const descEl = document.getElementById('plt-d-'+ci+'-'+ii);
             const qEl    = document.getElementById('plt-q-'+ci+'-'+ii);
             const uEl    = document.getElementById('plt-u-'+ci+'-'+ii);
             const pmEl   = document.getElementById('plt-pm-'+ci+'-'+ii);
             const poEl   = document.getElementById('plt-po-'+ci+'-'+ii);
+            if (idEl   && idEl.value.trim()) item.id = idEl.value.trim();
             if (descEl) item.descripcion = descEl.value.trim();
             if (qEl)    item.cantidad    = parseFloat(qEl.value)  || 0;
             if (uEl)    item.unidad      = uEl.value.trim() || 'GL';
@@ -4540,7 +4659,12 @@ function deletePlantillaItem(ci, ii) {
 
 function addPlantillaCategoria() {
     savePlantillaForm();
-    const newId = String(plantilla.length + 1).padStart(2, '0');
+    // Use max existing numeric id + 1 to avoid collisions after deletions
+    const maxNum = plantilla.reduce((mx, c) => {
+        const n = parseInt(String(c.id).replace(/\D/g,'')) || 0;
+        return Math.max(mx, n);
+    }, 0);
+    const newId = String(maxNum + 1).padStart(2, '0');
     plantilla.push({ id: newId, nombre: 'Nueva categoría', unidad: 'm²', proveedor: '', items: [] });
     savePlantilla();
     if (!window._pltOpen) window._pltOpen = {};
@@ -4796,6 +4920,305 @@ function toggleClientesMenu() {
 }
 
 // ═══════════════════════════════════════════════════
+//  PLANTILLA EXCEL (dinámica desde Configuración)
+// ═══════════════════════════════════════════════════
+
+function toggleBackupPanel() {
+    const panel = document.getElementById('backup-panel');
+    const arrow = document.getElementById('backup-arrow');
+    if (!panel) return;
+    const open = panel.style.display === 'block';
+    panel.style.display = open ? 'none' : 'block';
+    if (arrow) arrow.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+async function importPlantillaXlsx(input) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = '';
+
+    // Lazy-load SheetJS
+    if (!window.XLSX) {
+        await new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+            s.onload = res; s.onerror = rej;
+            document.head.appendChild(s);
+        });
+    }
+
+    const buf  = await file.arrayBuffer();
+    const wb   = window.XLSX.read(buf, { type: 'array' });
+    const ws   = wb.Sheets[wb.SheetNames[0]];
+    const data = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    // Detect header row and columns (same logic as parseXlsFile)
+    let startIdx = 0;
+    let colRubro = -1, colCod = -1, colDesc = 0, colQty = 1, colUnit = 2, colMat = 3, colMO = 4;
+
+    for (let i = 0; i < Math.min(data.length, 6); i++) {
+        const row = data[i].map(c => String(c).toLowerCase().trim());
+        const hasHeader = row.some(c => ['desc','concepto','rubro','descripcion','descripción'].some(k => c.includes(k)));
+        if (hasHeader) {
+            startIdx = i + 1;
+            row.forEach((c, idx) => {
+                if (['rubro','modulo','módulo','categoria','categoría'].some(k => c === k || c.startsWith(k))) colRubro = idx;
+                else if (['cod','codigo','código'].some(k => c.includes(k)))                                   colCod   = idx;
+                else if (['desc','concepto','detalle','nombre'].some(k => c.includes(k)))                      colDesc  = idx;
+                else if (['cant','qty','cantidad'].some(k => c.includes(k)))                                   colQty   = idx;
+                else if (['unid','unit','und'].some(k => c.includes(k)))                                       colUnit  = idx;
+                else if (['pu.mat','p.mat','mat','precio mat'].some(k => c.includes(k)))                       colMat   = idx;
+                else if (['pmo','p.mo','mano','mo'].some(k => c.includes(k)))                                  colMO    = idx;
+            });
+            break;
+        }
+    }
+
+    // Parse rows
+    const parsed = [];
+    for (let i = startIdx; i < data.length; i++) {
+        const row  = data[i];
+        if (!row || !row.length) continue;
+        const desc = String(row[colDesc] || '').trim();
+        if (!desc || desc.startsWith('Unidades válidas')) continue;
+        const rubro   = colRubro >= 0 ? String(row[colRubro] || '').trim() : '';
+        const cod     = colCod   >= 0 ? String(row[colCod]   || '').trim() : '';
+        const qty     = parseFloat(String(row[colQty]  || '1').replace(',','.')) || 1;
+        const rawUnit = String(row[colUnit] || '').trim().toLowerCase();
+        const unit    = rawUnit || 'GL';
+        const pMat    = parseFloat(String(row[colMat]  || '0').replace(',','.').replace(/[^0-9.]/g,'')) || 0;
+        const pMO     = parseFloat(String(row[colMO]   || '0').replace(',','.').replace(/[^0-9.]/g,'')) || 0;
+        if (rubro) parsed.push({ rubro, cod, desc, qty, unit, pMat, pMO });
+    }
+
+    if (!parsed.length) { toast('⚠️ No se encontraron ítems en el Excel'); return; }
+
+    // Group by rubro
+    const byRubro = {};
+    parsed.forEach(r => {
+        const key = r.rubro.toLowerCase();
+        if (!byRubro[key]) byRubro[key] = { rubroName: r.rubro, rows: [] };
+        byRubro[key].rows.push(r);
+    });
+
+    let updated = 0, created = 0;
+    Object.values(byRubro).forEach(({ rubroName, rows }) => {
+        const key = rubroName.toLowerCase();
+        let cat = plantilla.find(c => c.nombre.toLowerCase() === key);
+        if (!cat) {
+            // Create new category
+            const maxNum = plantilla.reduce((mx, c) => Math.max(mx, parseInt(String(c.id).replace(/\D/g,'')) || 0), 0);
+            const newId  = String(maxNum + 1).padStart(2, '0');
+            cat = { id: newId, nombre: rubroName, unidad: 'm²', proveedor: '', items: [] };
+            plantilla.push(cat);
+            created++;
+        } else {
+            updated++;
+        }
+        // Replace items from Excel (preserves manual additions not in the file — merge by cod/desc)
+        rows.forEach(r => {
+            const existing = cat.items.find(it => (r.cod && it.id === r.cod) || it.descripcion.toLowerCase() === r.desc.toLowerCase());
+            if (existing) {
+                // Update prices
+                existing.precioMat = r.pMat;
+                existing.precioMO  = r.pMO;
+                existing.cantidad  = r.qty;
+                existing.unidad    = r.unit || existing.unidad;
+            } else {
+                cat.items.push({
+                    id:          r.cod || (cat.id + '.' + String(cat.items.length + 1).padStart(2,'0')),
+                    descripcion: r.desc,
+                    cantidad:    r.qty,
+                    unidad:      r.unit,
+                    precioMat:   r.pMat,
+                    precioMO:    r.pMO
+                });
+            }
+        });
+    });
+
+    savePlantilla();
+    // Re-render accordion
+    const acc = document.getElementById('plt-accordion');
+    if (acc) acc.innerHTML = plantilla.map((cat, ci) => plantillaCatRow(cat, ci)).join('');
+    toast(`✅ Plantilla actualizada — ${updated} rubros actualizados, ${created} creados`);
+}
+
+async function downloadPlantillaXlsx() {
+    toast('⏳ Generando plantilla Excel…');
+
+    // Lazy-load ExcelJS
+    if (!window.ExcelJS) {
+        await new Promise((res, rej) => {
+            const sc = document.createElement('script');
+            sc.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+            sc.onload = res; sc.onerror = rej;
+            document.head.appendChild(sc);
+        });
+    }
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'MZ Latam';
+    wb.created = new Date();
+
+    const ws = wb.addWorksheet('Ítems por Rubro');
+    ws.columns = [
+        { key:'rubro',    width:28 },
+        { key:'cod',      width:14 },
+        { key:'desc',     width:40 },
+        { key:'qty',      width:10 },
+        { key:'unit',     width:10 },
+        { key:'priceMat', width:14 },
+        { key:'priceMO',  width:14 },
+        { key:'coment',   width:30 },
+    ];
+
+    // ── Fila título ──────────────────────────────────
+    const today = new Date().toLocaleDateString('es-AR');
+    const t1 = ws.addRow(['MZ LATAM — PLANTILLA DE ÍTEMS POR RUBRO', '', '', '', '', '', '', today]);
+    ws.mergeCells(t1.number, 1, t1.number, 7);
+    t1.height = 26;
+    t1.getCell(1).style = {
+        font:      { bold:true, size:13, color:{ argb:'FFFFFFFF' } },
+        fill:      { type:'pattern', pattern:'solid', fgColor:{ argb:'FF0A0A0A' } },
+        alignment: { horizontal:'left', vertical:'middle' }
+    };
+    t1.getCell(8).style = {
+        font:      { size:10, color:{ argb:'FFAAAAAA' } },
+        fill:      { type:'pattern', pattern:'solid', fgColor:{ argb:'FF0A0A0A' } },
+        alignment: { horizontal:'right', vertical:'middle' }
+    };
+
+    // ── Fila instrucción ────────────────────────────
+    const ti = ws.addRow(['Completá los precios (PU.Mat y PMO) y guardá. Importá este archivo desde el presupuestador para cargar los ítems automáticamente.']);
+    ws.mergeCells(ti.number, 1, ti.number, 8);
+    ti.height = 18;
+    ti.getCell(1).style = {
+        font:      { italic:true, size:10, color:{ argb:'FF666666' } },
+        fill:      { type:'pattern', pattern:'solid', fgColor:{ argb:'FFF5F5F5' } },
+        alignment: { horizontal:'left', vertical:'middle' }
+    };
+
+    ws.addRow([]);
+
+    // ── Fila encabezados ───────────────────────────
+    const hdrs = ['Rubro', 'Código Item', 'Descripción', 'Cantidad', 'Unidad', 'PU.Mat (USD)', 'PMO (USD)', 'Comentarios'];
+    const hr = ws.addRow(hdrs);
+    hr.height = 20;
+    hr.eachCell((cell, colNum) => {
+        cell.style = {
+            font:      { bold:true, size:10, color:{ argb:'FFFFFFFF' } },
+            fill:      { type:'pattern', pattern:'solid', fgColor:{ argb:'FF333333' } },
+            alignment: { horizontal: colNum >= 4 && colNum <= 7 ? 'center' : 'left', vertical:'middle' },
+            border:    { bottom:{ style:'medium', color:{ argb:'FF000000' } } }
+        };
+    });
+
+    // ── Ítems por rubro ────────────────────────────
+    const MOD_PALETTE = [
+        { bg:'#EEF2FF', text:'#4338CA', border:'#6366F1' },
+        { bg:'#FFF7ED', text:'#C2410C', border:'#F97316' },
+        { bg:'#F0FDF4', text:'#15803D', border:'#22C55E' },
+        { bg:'#FDF4FF', text:'#7E22CE', border:'#A855F7' },
+        { bg:'#FFF1F2', text:'#BE123C', border:'#F43F5E' },
+        { bg:'#FFFBEB', text:'#92400E', border:'#F59E0B' },
+        { bg:'#F0FDFA', text:'#065F46', border:'#10B981' },
+        { bg:'#EFF6FF', text:'#1D4ED8', border:'#3B82F6' },
+    ];
+    const argb = hex => 'FF' + hex.replace('#','').toUpperCase();
+
+    let rowCount = 0;
+    plantilla.forEach((cat, ci) => {
+        const pal  = MOD_PALETTE[ci % MOD_PALETTE.length];
+        const items = cat.items || [];
+
+        // Fila separador de rubro
+        const sepRow = ws.addRow([cat.nombre.toUpperCase()]);
+        ws.mergeCells(sepRow.number, 1, sepRow.number, 8);
+        sepRow.height = 17;
+        sepRow.getCell(1).style = {
+            font:      { bold:true, size:10, color:{ argb: argb(pal.text) } },
+            fill:      { type:'pattern', pattern:'solid', fgColor:{ argb: argb(pal.bg) } },
+            border:    { left:{ style:'medium', color:{ argb: argb(pal.border) } } },
+            alignment: { horizontal:'left', vertical:'middle' }
+        };
+
+        if (!items.length) {
+            // Rubro vacío — una fila placeholder
+            const pr = ws.addRow([cat.nombre, cat.id + '-001', '(sin ítems — completar)', 1, 'm²', 0, 0, '']);
+            pr.height = 16;
+            const isAlt = rowCount % 2 === 1;
+            pr.eachCell((cell, cn) => {
+                cell.style = {
+                    font:  { italic:true, size:10, color:{ argb:'FFAAAAAA' } },
+                    fill:  { type:'pattern', pattern:'solid', fgColor:{ argb: isAlt ? 'FFEFEFEF' : 'FFFFFFFF' } },
+                    border:{ left:{ style:'medium', color:{ argb: argb(pal.border) } }, bottom:{ style:'hair', color:{argb:'FFEEEEEE'} } },
+                    alignment: { horizontal: cn >= 4 && cn <= 7 ? 'center' : 'left', vertical:'middle' }
+                };
+                if (cn >= 6 && cn <= 7) {
+                    cell.numFmt = '#,##0.00';
+                    cell.value = 0;
+                }
+            });
+            rowCount++;
+            return;
+        }
+
+        items.forEach((item, ii) => {
+            const isAlt = rowCount % 2 === 1;
+            const ir = ws.addRow([
+                cat.nombre,
+                item.id || (cat.id + '-' + String(ii+1).padStart(3,'0')),
+                item.descripcion || '',
+                item.cantidad || 1,
+                item.unidad || 'm²',
+                0,
+                0,
+                ''
+            ]);
+            ir.height = 16;
+            ir.eachCell((cell, cn) => {
+                cell.style = {
+                    font:  { size:10 },
+                    fill:  { type:'pattern', pattern:'solid', fgColor:{ argb: isAlt ? 'FFEFEFEF' : 'FFFFFFFF' } },
+                    border:{ left:{ style:'medium', color:{ argb: argb(pal.border) } }, bottom:{ style:'hair', color:{argb:'FFEEEEEE'} } },
+                    alignment: { horizontal: cn >= 4 && cn <= 7 ? 'center' : 'left', vertical:'middle' }
+                };
+                if (cn >= 6 && cn <= 7) {
+                    cell.numFmt = '#,##0.00';
+                }
+            });
+            rowCount++;
+        });
+    });
+
+    // ── Fila referencia de unidades ────────────────
+    ws.addRow([]);
+    const refRow = ws.addRow(['Unidades válidas: m² · m³ · ml · un · gl · hs · kg · lote']);
+    ws.mergeCells(refRow.number, 1, refRow.number, 8);
+    refRow.height = 16;
+    refRow.getCell(1).style = {
+        font:      { italic:true, size:9, color:{ argb:'FF888888' } },
+        fill:      { type:'pattern', pattern:'solid', fgColor:{ argb:'FFF9F9F9' } },
+        alignment: { horizontal:'left', vertical:'middle' }
+    };
+
+    // ── Freezar fila de encabezados ─────────────────
+    ws.views = [{ state:'frozen', ySplit:4 }];
+
+    // ── Descargar ──────────────────────────────────
+    const buf  = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = 'MZ_Plantilla_Rubros.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('✅ Plantilla descargada');
+}
+
+// ═══════════════════════════════════════════════════
 //  EXCEL EXPORT
 // ═══════════════════════════════════════════════════
 async function exportExcel(presupId) {
@@ -4819,7 +5242,16 @@ async function exportExcel(presupId) {
     wb.created = new Date();
     const tc      = p.usdArs || cfg.usdArs;
     const xlMoneda = p.moneda || 'USD';
-    const mods = (p.modules || []).filter(m => m.on !== false && m.sub > 0);
+    // Recalculate sub from items on-the-fly so export is never empty due to a stale stored value
+    const mods = (p.modules || [])
+        .filter(m => m.on !== false)
+        .map(m => {
+            const sub = m.mode === 'items'
+                ? (m.items||[]).reduce((s,it) => s + (parseFloat(it.qty)||0)*((parseFloat(it.priceMat??it.priceUSD??0)||0)+(parseFloat(it.priceMO)||0)), 0)
+                : (parseFloat(m.costUSD)||0) * (parseFloat(p.metros)||0);
+            return { ...m, sub };
+        })
+        .filter(m => m.sub > 0 || (m.items||[]).length > 0);
     const asg  = p.assignedTo ? (getUser(p.assignedTo)?.name || '—') : '—';
 
     const stripEmoji = str => String(str||'').replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[\u{1F300}-\u{1F9FF}]/gu, '').trim();
@@ -4972,17 +5404,17 @@ async function exportExcel(presupId) {
     // ── HOJA 2: DETALLE POR MODULO ────────────────────
     const ws2 = wb.addWorksheet('Detalle Modulos');
     ws2.columns = [
-        {key:'a',width:10},{key:'b',width:38},{key:'c',width:10},
-        {key:'d',width:10},{key:'e',width:16},{key:'f',width:16},{key:'g',width:16}
+        {key:'a',width:10},{key:'b',width:36},{key:'c',width:8},
+        {key:'d',width:9},{key:'e',width:14},{key:'f',width:14},{key:'g',width:15},{key:'h',width:15}
     ];
 
     const t2 = ws2.addRow(['MZ LATAM — DETALLE DE MODULOS — PRESUPUESTO #' + p.num]);
-    ws2.mergeCells(t2.number,1,t2.number,7);
+    ws2.mergeCells(t2.number,1,t2.number,8);
     t2.height = 26;
     t2.getCell(1).style = { font:{bold:true,size:13,color:{argb:'FFFFFFFF'}}, fill:{type:'pattern',pattern:'solid',fgColor:{argb:'FF0A0A0A'}}, alignment:{horizontal:'left',vertical:'middle'} };
 
     const t2b = ws2.addRow(['Cliente: ' + p.cliente + '   |   Proyecto: ' + p.proyecto + '   |   TC: 1 USD = ARS ' + fmt(tc)]);
-    ws2.mergeCells(t2b.number,1,t2b.number,7);
+    ws2.mergeCells(t2b.number,1,t2b.number,8);
     t2b.height = 16;
     t2b.getCell(1).style = { font:{italic:true,size:10,color:{argb:'FF666666'}}, fill:{type:'pattern',pattern:'solid',fgColor:{argb:'FFF5F5F5'}} };
 
@@ -4994,14 +5426,14 @@ async function exportExcel(presupId) {
 
         // Module header
         const mhRow = ws2.addRow([num + '.', stripEmoji(m.name).toUpperCase()]);
-        ws2.mergeCells(mhRow.number, 2, mhRow.number, 7);
+        ws2.mergeCells(mhRow.number, 2, mhRow.number, 8);
         mhRow.height = 20;
         mhRow.getCell(1).style = modHeaderStyle(c);
         mhRow.getCell(2).style = { ...modHeaderStyle(c), font:{bold:true,size:11,color:{argb:argb(c.text)}} };
 
         // Column headers
         const secMoneda = xlMoneda === 'ARS' ? 'USD' : 'ARS';
-        const chRow = ws2.addRow(['Item','Descripcion','Cant.','Unidad',`Precio ${xlMoneda}`,`Subtotal ${xlMoneda}`,`Subtotal ${secMoneda}`]);
+        const chRow = ws2.addRow(['Item','Descripcion','Cant.','Unidad',`P.Mat ${xlMoneda}`,`P.MO ${xlMoneda}`,`Subtotal ${xlMoneda}`,`Subtotal ${secMoneda}`]);
         chRow.height = 16;
         chRow.eachCell(cell => { cell.style = colHeaderStyle(c); });
 
@@ -5011,27 +5443,29 @@ async function exportExcel(presupId) {
 
         if (m.mode === 'items' && m.items?.length > 0) {
             m.items.forEach((item, ii) => {
-                const sub    = fv(item.qty) * fv(item.priceUSD);
+                const pm     = fv(item.priceMat ?? item.priceUSD ?? 0);
+                const pmo    = fv(item.priceMO);
+                const sub    = fv(item.qty) * (pm + pmo);
                 const subSec = xlMoneda==='ARS' ? sub/tc : sub*tc;
                 const st = itemStyle(c, ii%2===1);
                 const stC = { ...st, alignment:{ horizontal:'center', vertical:'middle' } };
-                const ir  = ws2.addRow([num + '.' + (ii+1), stripEmoji(item.desc||'—'), fv(item.qty), item.unit||'', fv(item.priceUSD), fv(sub), subSec]);
+                const ir  = ws2.addRow([num + '.' + (ii+1), stripEmoji(item.desc||'—'), fv(item.qty), item.unit||'', pm, pmo, fv(sub), subSec]);
                 ir.height = 16;
-                // Aplicar style + numFmt juntos por celda para que no se pierda el formato
                 ir.getCell(1).style = st;
                 ir.getCell(2).style = st;
                 ir.getCell(3).style = { ...stC, numFmt: qtyFmt  };
                 ir.getCell(4).style = stC;
                 ir.getCell(5).style = { ...st,  numFmt: priNFmt };
                 ir.getCell(6).style = { ...st,  numFmt: priNFmt };
-                ir.getCell(7).style = { ...st,  numFmt: secNFmt };
+                ir.getCell(7).style = { ...st,  numFmt: priNFmt };
+                ir.getCell(8).style = { ...st,  numFmt: secNFmt };
             });
         } else {
             const sub0 = fv(m.sub);
             const sec0 = xlMoneda==='ARS' ? sub0/tc : sub0*tc;
             const st0  = itemStyle(c, false);
             const stC0 = { ...st0, alignment:{ horizontal:'center', vertical:'middle' } };
-            const ir = ws2.addRow([num+'.1', stripEmoji(m.name), fv(p.metros), 'm2', fv(m.costUSD||0), sub0, sec0]);
+            const ir = ws2.addRow([num+'.1', stripEmoji(m.name), fv(p.metros), 'm2', fv(m.costUSD||0), 0, sub0, sec0]);
             ir.height = 16;
             ir.getCell(1).style = st0;
             ir.getCell(2).style = st0;
@@ -5039,17 +5473,18 @@ async function exportExcel(presupId) {
             ir.getCell(4).style = stC0;
             ir.getCell(5).style = { ...st0,  numFmt: priNFmt };
             ir.getCell(6).style = { ...st0,  numFmt: priNFmt };
-            ir.getCell(7).style = { ...st0,  numFmt: secNFmt };
+            ir.getCell(7).style = { ...st0,  numFmt: priNFmt };
+            ir.getCell(8).style = { ...st0,  numFmt: secNFmt };
         }
 
         // Subtotal row
         const secSub = xlMoneda==='ARS' ? fv(m.sub)/tc : fv(m.sub)*tc;
-        const sr = ws2.addRow(['','SUBTOTAL ' + stripEmoji(m.name).toUpperCase(),'','','',fv(m.sub),secSub]);
+        const sr = ws2.addRow(['','SUBTOTAL ' + stripEmoji(m.name).toUpperCase(),'','','','',fv(m.sub),secSub]);
         sr.height = 17;
         const sst = subtotalStyle(c);
         sr.eachCell(cell => { cell.style = sst; });
-        sr.getCell(6).style = { ...sst, numFmt: xlMoneda==='ARS' ? '"$ "#,##0' : '"USD "#,##0' };
-        sr.getCell(7).style = { ...sst, numFmt: xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0' };
+        sr.getCell(7).style = { ...sst, numFmt: xlMoneda==='ARS' ? '"$ "#,##0' : '"USD "#,##0' };
+        sr.getCell(8).style = { ...sst, numFmt: xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0' };
 
         // Proveedores
         const provs = m.proveedores || [];
@@ -5069,7 +5504,7 @@ async function exportExcel(presupId) {
 
         if (m.notes?.trim()) {
             const nr = ws2.addRow(['','Notas: ' + stripEmoji(m.notes.trim().slice(0,200))]);
-            ws2.mergeCells(nr.number,2,nr.number,7);
+            ws2.mergeCells(nr.number,2,nr.number,8);
             nr.getCell(2).style = { font:{italic:true,size:9,color:{argb:'FF888888'}} };
         }
     });
@@ -5080,23 +5515,23 @@ async function exportExcel(presupId) {
     const gt2Costo = xlMoneda==='ARS' ? fv(p.totalARS/(1+gt2MG)) : fv(p.totalUSD/(1+gt2MG));
     const gt2CostoSec = xlMoneda==='ARS' ? fv(p.totalUSD/(1+gt2MG)) : fv(p.totalARS/(1+gt2MG));
 
-    const gt0 = ws2.addRow(['','COSTO BASE (sin MG)','','','', gt2Costo, gt2CostoSec]);
-    const gt1 = ws2.addRow(['','PRECIO AL CLIENTE  (+'+(p.margen||cfg.margen)+'% MG)','','','',
+    const gt0 = ws2.addRow(['','COSTO BASE (sin MG)','','','','', gt2Costo, gt2CostoSec]);
+    const gt1 = ws2.addRow(['','PRECIO AL CLIENTE  (+'+(p.margen||cfg.margen)+'% MG)','','','','',
         xlMoneda==='ARS' ? fv(p.totalARS) : fv(p.totalUSD),
         xlMoneda==='ARS' ? fv(p.totalUSD) : fv(p.totalARS)]);
-    const gt2 = ws2.addRow(['','ESTIMADO RANGO  (precio ±10%)','','','',
+    const gt2 = ws2.addRow(['','ESTIMADO RANGO  (precio ±10%)','','','','',
         xlMoneda==='ARS' ? fv(p.loUSD*tc) + ' — ' + fv(p.hiUSD*tc) : fv(p.loUSD) + ' — ' + fv(p.hiUSD),
         '']);
     [gt0,gt1,gt2].forEach(r => {
         r.height = 18;
         const gtSt = totalStyle;
         r.eachCell(cell => { cell.style = gtSt; });
-        r.getCell(6).style = { ...gtSt, numFmt: xlMoneda==='ARS' ? '"$ "#,##0' : '"USD "#,##0' };
-        r.getCell(7).style = { ...gtSt, numFmt: xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0' };
+        r.getCell(7).style = { ...gtSt, numFmt: xlMoneda==='ARS' ? '"$ "#,##0' : '"USD "#,##0' };
+        r.getCell(8).style = { ...gtSt, numFmt: xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0' };
     });
     gt1.getCell(2).style = { ...totalStyle, fill:{type:'pattern',pattern:'solid',fgColor:{argb:'FFE8F5E9'}}, font:{bold:true,size:11,color:{argb:'FF15803D'}} };
-    gt1.getCell(6).style = { ...totalStyle, numFmt: xlMoneda==='ARS' ? '"$ "#,##0' : '"USD "#,##0', font:{bold:true,size:11,color:{argb:'FF15803D'}} };
-    gt1.getCell(7).style = { ...totalStyle, numFmt: xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0', font:{bold:true,size:11,color:{argb:'FF15803D'}} };
+    gt1.getCell(7).style = { ...totalStyle, numFmt: xlMoneda==='ARS' ? '"$ "#,##0' : '"USD "#,##0', font:{bold:true,size:11,color:{argb:'FF15803D'}} };
+    gt1.getCell(8).style = { ...totalStyle, numFmt: xlMoneda==='ARS' ? '"USD "#,##0' : '"$ "#,##0', font:{bold:true,size:11,color:{argb:'FF15803D'}} };
 
     // ── HOJA 3: RESUMEN PROVEEDORES ──────────────────
     const ws3 = wb.addWorksheet('Resumen Proveedores');
@@ -5347,7 +5782,7 @@ function saveEditInfo(presupId) {
     let baseTotal = 0;
     (plist[idx].modules || []).forEach(m => {
         if (m.mode === 'm2') { m.sub = (m.costUSD || 0) * (plist[idx].metros || 0); }
-        else { m.sub = (m.items || []).reduce((s, it) => s + ((parseFloat(it.qty)||0) * (parseFloat(it.priceUSD)||0)), 0); }
+        else { m.sub = (m.items || []).reduce((s, it) => s + ((parseFloat(it.qty)||0) * ((parseFloat(it.priceMat??it.priceUSD??0)||0)+(parseFloat(it.priceMO)||0))), 0); }
         baseTotal += m.sub;
     });
     // totalUSD/ARS = precio al cliente (base + MG%)
@@ -6441,20 +6876,21 @@ function impConfirmItems(presupId, modId) {
     checked.forEach(idx => {
         const item = last.items[idx];
         if (!item) return;
-        const priceUSD = isARS ? item.price / tc : item.price;
+        const priceVal = isARS ? item.price / tc : item.price;
         mod.items.push({
             id:           uid(),
             desc:         item.desc,
             qty:          1,
             unit:         item.unit || 'gl',
-            priceUSD:     parseFloat(priceUSD.toFixed(2)),
+            priceMat:     parseFloat(priceVal.toFixed(2)),
+            priceMO:      0,
             supplierId:   s.id,
             sourcePeriod: last.period
         });
     });
 
     // Recalcular subtotal del módulo
-    mod.sub = mod.items.reduce((s,it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.priceUSD)||0), 0);
+    mod.sub = mod.items.reduce((s,it) => s + (parseFloat(it.qty)||0)*((parseFloat(it.priceMat??it.priceUSD??0)||0)+(parseFloat(it.priceMO)||0)), 0);
     _recalcPresupTotals(pi);
     saveDB();
 
@@ -6511,12 +6947,13 @@ function showSyncPricesModal(presupId, modId) {
         const hasNew  = latest && (!curPer || latest.period > curPer);
         const norm    = d => (d||'').toLowerCase().trim().replace(/\s+/g,' ');
         const diffItems = items.map(it => {
-            if (!latest) return { item: it, currentUSD: it.priceUSD, newUSD: null, pct: null, found: false };
+            const curPrice = parseFloat(it.priceMat ?? it.priceUSD ?? 0) || 0;
+            if (!latest) return { item: it, currentUSD: curPrice, newUSD: null, pct: null, found: false };
             const match = latest.items.find(li => norm(li.desc) === norm(it.desc));
-            if (!match) return { item: it, currentUSD: it.priceUSD, newUSD: null, pct: null, found: false };
+            if (!match) return { item: it, currentUSD: curPrice, newUSD: null, pct: null, found: false };
             const newUSD = isARS ? match.price / tc : match.price;
-            const pct    = it.priceUSD > 0 ? ((newUSD - it.priceUSD) / it.priceUSD * 100) : 0;
-            return { item: it, currentUSD: it.priceUSD, newUSD: parseFloat(newUSD.toFixed(2)), pct: parseFloat(pct.toFixed(1)), found: true };
+            const pct    = curPrice > 0 ? ((newUSD - curPrice) / curPrice * 100) : 0;
+            return { item: it, currentUSD: curPrice, newUSD: parseFloat(newUSD.toFixed(2)), pct: parseFloat(pct.toFixed(1)), found: true };
         });
         diff.push({ supplierId: sid, supplierName: s.name, currentPeriod: curPer, newPeriod: latest?.period||null, hasNew, items: diffItems });
     });
@@ -6617,7 +7054,7 @@ function applySyncPrices() {
             if (!di.found || Math.abs(di.pct||0) < 0.1) return;
             const it = mod.items.find(x => x.id === di.item.id);
             if (!it) return;
-            it.priceUSD     = di.newUSD;
+            it.priceMat     = di.newUSD;
             it.sourcePeriod = sd.newPeriod;
             updated++;
         });
@@ -6625,7 +7062,7 @@ function applySyncPrices() {
 
     if (updated === 0) { toast('ℹ️ Sin cambios para aplicar'); return; }
 
-    mod.sub = mod.items.reduce((s,it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.priceUSD)||0), 0);
+    mod.sub = mod.items.reduce((s,it) => s + (parseFloat(it.qty)||0)*((parseFloat(it.priceMat??it.priceUSD??0)||0)+(parseFloat(it.priceMO)||0)), 0);
     _recalcPresupTotals(pi);
     saveDB();
 
@@ -6750,7 +7187,7 @@ function seedDemoData() {
         // Recalculate subs and totals
         const mg = 0.25;
         modules.forEach(m => {
-            m.sub  = m.items.reduce((s, it) => s + (it.qty * it.priceUSD), 0);
+            m.sub  = m.items.reduce((s, it) => s + (it.qty * ((it.priceMat??it.priceUSD??0)+(it.priceMO||0))), 0);
         });
         const totalUSD = modules.reduce((s,m) => s + m.sub, 0);
 
@@ -6965,7 +7402,7 @@ function seedVillaDelParque() {
 
     // Compute subs
     modules.forEach(m => {
-        m.sub = m.items.reduce((s, it) => s + (parseFloat(it.qty)||0) * (parseFloat(it.priceUSD)||0), 0);
+        m.sub = m.items.reduce((s, it) => s + (parseFloat(it.qty)||0) * ((parseFloat(it.priceMat??it.priceUSD??0)||0)+(parseFloat(it.priceMO)||0)), 0);
     });
     const baseTotal = modules.reduce((s, m) => s + m.sub, 0);
     const totalARS  = baseTotal;
@@ -7074,11 +7511,12 @@ async function parseLicitacionXlsx(buffer) {
         const candidate = {};
         Object.entries(cells).forEach(([col, v]) => {
             const c = parseInt(col);
-            if (!candidate.code  && (v === 'item' || v === 'codigo' || v === 'cap.' || v === 'capitulo' || v.match(/^n[°o.]/))) candidate.code  = c;
-            if (!candidate.desc  && (v.includes('descripci') || v === 'rubro/tarea' || v === 'rubro' || v === 'tarea' || v.includes('designacion'))) candidate.desc  = c;
-            if (!candidate.unit  && (v === 'u' || v === 'ud' || v === 'udad' || v.includes('unidad')))                           candidate.unit  = c;
-            if (!candidate.qty   && (v === 'cant' || v.includes('cantidad')))                                                     candidate.qty   = c;
-            if (!candidate.price && (v.includes('p.unit') || v.includes('unitario') || v.includes('precio mat') || v.includes('precio unit') || v.includes('costo unit') || v.includes('p. unit'))) candidate.price = c;
+            if (!candidate.code    && (v === 'item' || v === 'codigo' || v === 'cap.' || v === 'capitulo' || v.match(/^n[°o.]/))) candidate.code    = c;
+            if (!candidate.desc    && (v.includes('descripci') || v === 'rubro/tarea' || v === 'rubro' || v === 'tarea' || v.includes('designacion'))) candidate.desc    = c;
+            if (!candidate.unit    && (v === 'u' || v === 'ud' || v === 'udad' || v.includes('unidad')))                           candidate.unit    = c;
+            if (!candidate.qty     && (v === 'cant' || v.includes('cantidad')))                                                     candidate.qty     = c;
+            if (!candidate.priceMO && (v.includes('p.mo') || v.includes('p. mo') || v.includes('mano de obra') || v.includes('m.o') || v.includes('precio mo') || v.includes('p.unit.mo'))) candidate.priceMO = c;
+            if (!candidate.price   && (v.includes('p.unit') || v.includes('unitario') || v.includes('precio mat') || v.includes('precio unit') || v.includes('costo unit') || v.includes('p. unit'))) candidate.price   = c;
         });
 
         // Valid header: must have desc AND qty in DIFFERENT columns
@@ -7140,11 +7578,12 @@ async function parseLicitacionXlsx(buffer) {
 
         if (!currentMod || !desc) continue;
 
-        const unitV    = getCellText(row.getCell(cols.unit)).trim() || 'gl';
-        const qtyNum   = parseFloat(getCellText(row.getCell(cols.qty)).replace(',', '.'))   || 1;
-        const priceNum = parseFloat(getCellText(row.getCell(cols.price)).replace(',', '.')) || 0;
+        const unitV     = getCellText(row.getCell(cols.unit)).trim() || 'gl';
+        const qtyNum    = parseFloat(getCellText(row.getCell(cols.qty)).replace(',', '.'))         || 1;
+        const priceNum  = parseFloat(getCellText(row.getCell(cols.price)).replace(',', '.'))       || 0;
+        const priceMONum= cols.priceMO ? (parseFloat(getCellText(row.getCell(cols.priceMO)).replace(',', '.')) || 0) : 0;
 
-        currentMod.items.push({ desc, unit: unitV, qty: qtyNum, price: priceNum, row: r });
+        currentMod.items.push({ desc, unit: unitV, qty: qtyNum, price: priceNum, priceMO: priceMONum, row: r });
     }
 
     const validMods = modules.filter(m => m.items.length > 0);
@@ -7214,10 +7653,11 @@ function confirmLicitacionImport() {
             desc:     it.desc,
             qty:      it.qty,
             unit:     it.unit,
-            priceUSD: parseFloat(((it.price || 0) / tc).toFixed(2)),
+            priceMat: parseFloat(((it.price  || 0) / tc).toFixed(2)),
+            priceMO:  parseFloat(((it.priceMO|| 0) / tc).toFixed(2)),
             licitRow: it.row
         }));
-        const sub = items.reduce((s, it) => s + it.qty * it.priceUSD, 0);
+        const sub = items.reduce((s, it) => s + it.qty * (it.priceMat + it.priceMO), 0);
         return {
             id:         uid(),
             name:       m.name,
@@ -7331,7 +7771,7 @@ function matchLicitacionWithSuppliers(presupId) {
                 itemDesc:     it.desc,
                 itemQty:      it.qty,
                 itemUnit:     it.unit,
-                currentUSD:   it.priceUSD || 0,
+                currentUSD:   parseFloat(it.priceMat??it.priceUSD??0) || 0,
                 supplierId:   found.supplierId,
                 supplierName: found.supplierName,
                 period:       found.period,
@@ -7426,7 +7866,7 @@ function applySupMatch() {
         const it = (mod.items||[]).find(i => i.id === mt.itemId);
         if (!it) return;
 
-        it.priceUSD      = mt.priceUSD;
+        it.priceMat      = mt.priceUSD;
         it.supplierId    = mt.supplierId;
         it.sourcePeriod  = mt.period;
         applied++;
@@ -7436,7 +7876,7 @@ function applySupMatch() {
 
     // Recalculate all module subs
     (p.modules||[]).forEach(m => {
-        m.sub = (m.items||[]).reduce((s, it) => s + (parseFloat(it.qty)||0) * (parseFloat(it.priceUSD)||0), 0);
+        m.sub = (m.items||[]).reduce((s, it) => s + (parseFloat(it.qty)||0) * ((parseFloat(it.priceMat??it.priceUSD??0)||0)+(parseFloat(it.priceMO)||0)), 0);
     });
     _recalcPresupTotals(plist.indexOf(p));
     saveDB();
@@ -7483,13 +7923,22 @@ async function exportLicitacionFinal(presupId) {
         const priceCol = lic.cols.price;
 
         // Write prices back to original rows
+        const priceMOCol = lic.cols.priceMO || null;
         (p.modules||[]).forEach(m => {
             (m.items||[]).forEach(it => {
                 if (!it.licitRow) return;
+                const pm  = parseFloat(it.priceMat??it.priceUSD??0)||0;
+                const pmo = parseFloat(it.priceMO)||0;
                 const rawPrice = isARS
-                    ? it.priceUSD * tc        // ARS file → write ARS
-                    : it.priceUSD;            // USD file → write USD
-                if (rawPrice <= 0) return;
+                    ? pm * tc        // ARS file → write ARS
+                    : pm;            // USD file → write USD
+                if (rawPrice <= 0 && pmo <= 0) return;
+                // Write priceMO column if detected
+                if (priceMOCol) {
+                    const rawMO = isARS ? pmo * tc : pmo;
+                    const cellMO = ws.getRow(it.licitRow).getCell(priceMOCol);
+                    if (rawMO > 0) cellMO.value = parseFloat(rawMO.toFixed(2));
+                }
                 const cell = ws.getRow(it.licitRow).getCell(priceCol);
                 cell.value = parseFloat(rawPrice.toFixed(2));
             });
