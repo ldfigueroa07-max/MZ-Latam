@@ -1121,7 +1121,7 @@ function render() {
     switch(view) {
         case 'dashboard':
             actions.innerHTML = '';
-            app.innerHTML = vDashboard(); setTimeout(dashBuildChart, 50); break;
+            app.innerHTML = vDashboard(); break;
         case 'estimador':
             actions.innerHTML = '';
             if (!editId) initSes(); // siempre limpio para nuevo presupuesto
@@ -1486,17 +1486,6 @@ function vDashboard() {
         </div>
         <div class="dash-th dash-obra-th"><span>Proyecto / Cliente</span><span>Mes</span><span style="text-align:right">Total USD</span><span style="text-align:right">Total ARS</span></div>
         <div class="dash-obra-row"><table>${obrasRows}</table></div>
-    </div>
-
-    <!-- Gráfico -->
-    <div class="dash-chart-wrap mb6">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-            <div style="font-size:14px;font-weight:700;color:#111">Facturación mensual por año</div>
-            <div id="dash-chart-legend" style="display:flex;gap:16px;flex-wrap:wrap"></div>
-        </div>
-        <div style="position:relative;width:100%;height:220px">
-            <canvas id="dash-chart-main" role="img" aria-label="Barras de facturación mensual agrupadas por año">Facturación mensual por año.</canvas>
-        </div>
     </div>
 
     <!-- Pipeline / Funnels -->
