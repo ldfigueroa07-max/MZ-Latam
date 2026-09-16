@@ -5084,7 +5084,7 @@ async function importMaestroXlsx(input) {
         saveMaster();
 
         toast(`✓ Maestro cargado: ${version} · ${totalItems} ítems en ${filteredRubros.length} rubros`);
-        document.getElementById('content').innerHTML = vConfig();
+        const _appEl = document.getElementById('app'); if (_appEl) _appEl.innerHTML = vConfig();
     } catch (e) {
         console.error(e);
         alert('Error al procesar el archivo: ' + e.message);
