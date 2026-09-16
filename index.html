@@ -855,6 +855,7 @@ const CFG          = 'mz_v2_config';
 const USERS_DB     = 'mz_v2_users';
 const SES_DB       = 'mz_v2_session';
 const SUPPLIERS_DB = 'mz_v2_suppliers';
+const MASTER_DB    = 'mz_v2_master';
 
 const USER_COLORS = ['#111111','#2563eb','#16a34a','#9333ea','#dc2626','#d97706','#0891b2','#be185d','#065f46','#7c3aed'];
 
@@ -890,6 +891,7 @@ const _storedPlist = JSON.parse(localStorage.getItem(DB));
 let plist     = (_storedPlist && _storedPlist.length > 0) ? _storedPlist : (SEED_DATA.presupuestos || []);
 let users     = JSON.parse(localStorage.getItem(USERS_DB))  || JSON.parse(JSON.stringify(DEFAULT_USERS));
 let suppliers = JSON.parse(localStorage.getItem(SUPPLIERS_DB)) || [];
+let master    = JSON.parse(localStorage.getItem(MASTER_DB))    || null;
 let plantilla = JSON.parse(localStorage.getItem('mz_v2_plantilla'));
 if (!plantilla || !Array.isArray(plantilla) || plantilla.length === 0) {
     plantilla = JSON.parse(JSON.stringify(PLANTILLA_BASE));
@@ -901,6 +903,7 @@ function saveUsers()     { localStorage.setItem(USERS_DB,     JSON.stringify(use
 function saveSes()       { localStorage.setItem(SES_DB,       JSON.stringify({ userId: currentUser?.id })); }
 function saveSuppliers() { localStorage.setItem(SUPPLIERS_DB, JSON.stringify(suppliers)); }
 function savePlantilla()  { localStorage.setItem('mz_v2_plantilla', JSON.stringify(plantilla)); }
+function saveMaster()     { localStorage.setItem(MASTER_DB,         JSON.stringify(master));     }
 function getSupplier(id) { return suppliers.find(s => s.id === id); }
 function logActivity(presupId, action) {
     const p = plist.find(x => x.id === presupId);
@@ -2130,8 +2133,12 @@ function vModRow(m) {
                 </table>
             </div>
             <div class="mod-footer">
-                <div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
                     <button class="btn-add-item" onclick="addItem('${m.id}')">＋ Agregar ítem</button>
+                    ${master ? `<button class="btn-add-item" onclick="openMaestroModal('${m.id}')"
+                        style="border-color:#6366f1;color:#6366f1"
+                        onmouseover="this.style.background='#6366f1';this.style.color='#fff'"
+                        onmouseout="this.style.background='#fff';this.style.color='#6366f1'">📋 Buscar en maestro</button>` : ''}
                 </div>
                 <div>
                     <span class="mod-total-line" id="mf-${m.id}">${isItems ? fPri(total) : `Estimado m²: ${fPri(total)}`}</span>
@@ -2182,8 +2189,11 @@ function vItemRow(modId, item) {
     const opts = UNITS.map(u => `<option value="${u}" ${u===item.unit?'selected':''}>${u}</option>`).join('');
     return `
     <tr id="ir-${item.id}">
-        <td><input class="ii desc" type="text" value="${esc(item.desc)}" placeholder="Ej: Tabique durlock doble placa"
-            oninput="updItem('${modId}','${item.id}','desc',this.value)"></td>
+        <td>
+            <input class="ii desc" type="text" value="${esc(item.desc)}" placeholder="Ej: Tabique durlock doble placa"
+                oninput="updItem('${modId}','${item.id}','desc',this.value)">
+            ${item.fromMaster ? `<div style="font-size:10px;color:#6366f1;font-weight:600;margin-top:2px;padding-left:2px">📋 ${esc(item.fromMaster)}</div>` : ''}
+        </td>
         <td><input class="ii num" type="number" min="0" step="0.01" value="${item.qty||''}" placeholder="0"
             oninput="updItem('${modId}','${item.id}','qty',this.value)"></td>
         <td><select class="ii-unit" onchange="updItem('${modId}','${item.id}','unit',this.value)">${opts}</select></td>
@@ -3516,6 +3526,8 @@ function vDetalleModulo(m, usdArs, idx, presup) {
             <div style="padding:8px 14px;border-top:1px solid #f0f0f0">
                 <button class="btn btn-ghost btn-sm no-print" onclick="addDetItem('${presup.id||m.presupId}','${m.id}')"
                     style="color:#7c3aed;font-size:13px">＋ Agregar ítem</button>
+                ${master ? `<button class="btn btn-ghost btn-sm no-print" onclick="openMaestroModalDet('${presup.id||m.presupId}','${m.id}')"
+                    style="color:#6366f1;font-size:13px">📋 Buscar en maestro</button>` : ''}
                 <button class="btn btn-ghost btn-sm no-print" onclick="showImportFromSupplierModal('${presup.id||m.presupId}','${m.id}')"
                     style="color:#059669;font-size:13px">📥 Importar desde proveedor</button>
                 ${hasSuppItems ? `<button class="btn btn-ghost btn-sm no-print" onclick="showSyncPricesModal('${presup.id||m.presupId}','${m.id}')"
@@ -3607,6 +3619,7 @@ function vDetItemRow(i, ri, modId, presup) {
             <input data-field="desc" value="${esc(i.desc||'')}" placeholder="Descripción…"
                 style="${iSt};color:#222;min-width:100px"
                 onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','desc',this.value)">
+            ${i.fromMaster ? `<div style="font-size:10px;color:#6366f1;font-weight:600;margin-top:2px;padding-left:4px">📋 ${esc(i.fromMaster)}</div>` : ''}
             <input data-field="comentario" value="${esc(i.comentario||'')}" placeholder="💬 Comentario…"
                 style="${iSt};font-size:11px;color:#888;font-style:italic;margin-top:1px"
                 onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','comentario',this.value)">
@@ -4056,6 +4069,34 @@ function vConfig() {
                         </button>
                     </div>
                     <input type="file" id="imp-plt-xlsx" style="display:none" accept=".xlsx,.xls" onchange="importPlantillaXlsx(this)">
+                </div>
+            </div>
+
+            <!-- Maestro de Precios -->
+            <div class="card mb4">
+                <div class="card-hd">
+                    <div>
+                        <span class="card-title">📋 Maestro de Precios</span>
+                        <span class="card-sub">${master ? `${esc(master.version)} · ${master.totalItems} ítems · ${esc(master.loadedAt)}` : 'Sin maestro cargado'}</span>
+                    </div>
+                </div>
+                <div class="card-bd">
+                    <div style="font-size:13px;color:#888;line-height:1.7;margin-bottom:16px">
+                        Cargá el archivo <strong>RENDIMIENTO MATERIALES</strong> mensual.<br>
+                        Los precios en ARS se usan al armar presupuestos y se convierten con el TC configurado.
+                    </div>
+                    ${master ? `
+                    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px">
+                        <div style="font-weight:700;color:#16a34a;margin-bottom:4px">✓ Maestro activo: ${esc(master.version)}</div>
+                        <div style="color:#555">${master.totalItems} ítems en ${master.rubros.length} rubros · Cargado el ${esc(master.loadedAt)}</div>
+                    </div>` : `
+                    <div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;color:#92400e">
+                        ⚠ Sin maestro cargado. Los módulos mostrarán la opción al cargar el archivo.
+                    </div>`}
+                    <button class="btn btn-secondary" onclick="document.getElementById('imp-maestro').click()">
+                        ${master ? '🔄 Actualizar maestro' : '📥 Cargar Maestro de Precios'}
+                    </button>
+                    <input type="file" id="imp-maestro" style="display:none" accept=".xlsx,.xls" onchange="importMaestroXlsx(this)">
                 </div>
             </div>
 
@@ -4917,6 +4958,381 @@ function toggleClientesMenu() {
     const open  = sub.style.display === 'block';
     sub.style.display   = open ? 'none' : 'block';
     arrow.style.transform = open ? '' : 'rotate(180deg)';
+}
+
+// ═══════════════════════════════════════════════════
+//  MAESTRO DE PRECIOS (RENDIMIENTO MATERIALES)
+// ═══════════════════════════════════════════════════
+
+async function importMaestroXlsx(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    // Lazy-load SheetJS
+    if (typeof XLSX === 'undefined') {
+        await new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+            s.onload = res; s.onerror = rej;
+            document.head.appendChild(s);
+        });
+    }
+
+    try {
+        const buf = await file.arrayBuffer();
+        const wb  = XLSX.read(buf, { type: 'array' });
+        const ws  = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+        if (!raw.length) { alert('El archivo está vacío'); input.value = ''; return; }
+
+        // ── Detectar versión (mes/año en el encabezado) ──
+        let version = 'SIN FECHA';
+        const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+        for (let r = 0; r < Math.min(6, raw.length); r++) {
+            const row = raw[r] || [];
+            for (const cell of row) {
+                if (typeof cell !== 'string') continue;
+                const m = cell.toUpperCase().match(new RegExp('(' + MESES.join('|') + ')\\s*\\d{4}'));
+                if (m) { version = m[0]; break; }
+            }
+            if (version !== 'SIN FECHA') break;
+        }
+
+        // ── Detectar columna "precio unitario" escaneando primeras filas ──
+        let colPrecio = -1;
+        for (let r = 0; r < Math.min(10, raw.length); r++) {
+            const row = raw[r] || [];
+            for (let c = 0; c < row.length; c++) {
+                const cell = typeof row[c] === 'string' ? row[c].toLowerCase().trim() : '';
+                if (cell.includes('precio unitario') || cell === 'p.u.' || cell === 'precio u') {
+                    colPrecio = c; break;
+                }
+            }
+            if (colPrecio >= 0) break;
+        }
+
+        // ── Parsear filas ──
+        const rubros = [];
+        let currentRubro = null;
+        let totalItems   = 0;
+
+        for (let r = 0; r < raw.length; r++) {
+            const row = raw[r];
+            if (!row) continue;
+
+            const codRaw  = row[1];
+            const descRaw = row[2];
+            const unitRaw = row[4];
+
+            if (!descRaw || typeof descRaw !== 'string' || !descRaw.trim()) continue;
+
+            const cod  = codRaw !== null && codRaw !== undefined ? String(codRaw).trim() : '';
+            const desc = descRaw.trim();
+            const unit = unitRaw ? String(unitRaw).trim() : '';
+
+            // Ítem: tiene código con punto decimal o letra+punto (1.1, C.01, R.02)
+            const isItem = unit && cod && /^\d+\.\d+$|^[A-Za-z]\.\d+$/.test(cod);
+
+            if (!isItem) {
+                // Fila de rubro/sección (sin unidad o sin código decimal)
+                if (desc && desc.length > 2 && !desc.startsWith('PRECIOS') && !desc.startsWith('KG') && !desc.startsWith('BOLSA') && !desc.startsWith('CANT')) {
+                    currentRubro = { nombre: desc, items: [] };
+                    rubros.push(currentRubro);
+                }
+                continue;
+            }
+
+            if (!currentRubro) { currentRubro = { nombre: 'General', items: [] }; rubros.push(currentRubro); }
+
+            // Obtener precio ARS: usar colPrecio detectado, o buscar en últimas 6 columnas el mayor valor
+            let precioARS = 0;
+            if (colPrecio >= 0 && colPrecio < row.length) {
+                precioARS = parseFloat(row[colPrecio]) || 0;
+            }
+            if (!precioARS || precioARS < 1) {
+                // Fallback: escanear últimas 6 columnas buscando el mayor valor numérico > 100
+                const end = row.length;
+                for (let ci = end - 6; ci < end; ci++) {
+                    const v = parseFloat(row[ci]);
+                    if (v > 100 && v > precioARS) precioARS = v;
+                }
+            }
+
+            if (precioARS > 0) {
+                currentRubro.items.push({
+                    cod,
+                    desc,
+                    unit,
+                    precioARS: Math.round(precioARS * 100) / 100
+                });
+                totalItems++;
+            }
+        }
+
+        // Filtrar rubros vacíos
+        const filteredRubros = rubros.filter(r => r.items.length > 0);
+
+        if (!totalItems) { alert('No se encontraron ítems con precios en el archivo. Verificá que sea el archivo RENDIMIENTO MATERIALES correcto.'); input.value = ''; return; }
+
+        master = {
+            version,
+            loadedAt: new Date().toLocaleDateString('es-AR'),
+            totalItems,
+            rubros: filteredRubros
+        };
+        saveMaster();
+
+        toast(`✓ Maestro cargado: ${version} · ${totalItems} ítems en ${filteredRubros.length} rubros`);
+        document.getElementById('content').innerHTML = vConfig();
+    } catch (e) {
+        console.error(e);
+        alert('Error al procesar el archivo: ' + e.message);
+    }
+    input.value = '';
+}
+
+// ── Modal de búsqueda en maestro ──
+function openMaestroModal(modId) {
+    if (!master || !master.rubros || !master.rubros.length) {
+        alert('No hay maestro cargado. Cargá el archivo RENDIMIENTO MATERIALES en Configuración → Maestro de Precios.');
+        return;
+    }
+
+    const html = `
+    <div id="maestro-overlay" onclick="if(event.target.id==='maestro-overlay')closeMaestroModal()"
+        style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px">
+        <div style="background:#fff;border-radius:12px;width:800px;max-width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 48px rgba(0,0,0,.25)">
+            <!-- Header -->
+            <div style="padding:18px 24px;border-bottom:1.5px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+                <div>
+                    <div style="font-size:18px;font-weight:700">📋 Maestro de Precios</div>
+                    <div style="font-size:12px;color:#888;margin-top:2px">${esc(master.version)} · ${master.totalItems} ítems · TC $${(cfg.usdArs||1250).toLocaleString('es-AR')}/USD</div>
+                </div>
+                <button onclick="closeMaestroModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#aaa;padding:4px;line-height:1">✕</button>
+            </div>
+            <!-- Filtros -->
+            <div style="padding:12px 24px;border-bottom:1px solid #f0f0f0;flex-shrink:0;display:flex;gap:10px">
+                <input id="maestro-search" type="text" placeholder="Buscar por descripción o código…"
+                    style="flex:1;padding:9px 14px;border:1.5px solid #d0d0d0;border-radius:8px;font-size:14px;font-family:inherit"
+                    oninput="renderMaestroResults('${modId}')">
+                <select id="maestro-rubro-filter" onchange="renderMaestroResults('${modId}')"
+                    style="padding:9px 14px;border:1.5px solid #d0d0d0;border-radius:8px;font-size:14px;font-family:inherit;background:#fff;max-width:220px">
+                    <option value="">Todos los rubros</option>
+                    ${master.rubros.map((r,i) => `<option value="${i}">${esc(r.nombre)}</option>`).join('')}
+                </select>
+            </div>
+            <!-- Cabecera columnas -->
+            <div style="padding:6px 24px;background:#f8f9fa;border-bottom:1px solid #ebebeb;flex-shrink:0;display:grid;grid-template-columns:80px 1fr 60px 110px 100px;gap:10px;font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#aaa">
+                <span>Código</span><span>Descripción</span><span style="text-align:center">Un.</span><span style="text-align:right">Precio ARS</span><span style="text-align:right">Precio USD</span>
+            </div>
+            <!-- Resultados -->
+            <div id="maestro-results" style="overflow-y:auto;flex:1">
+                ${vMaestroResults(modId, '', -1)}
+            </div>
+        </div>
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', html);
+    setTimeout(() => document.getElementById('maestro-search')?.focus(), 60);
+}
+
+function closeMaestroModal() {
+    document.getElementById('maestro-overlay')?.remove();
+}
+
+function renderMaestroResults(modId) {
+    const q  = (document.getElementById('maestro-search')?.value  || '').toLowerCase().trim();
+    const ri = parseInt(document.getElementById('maestro-rubro-filter')?.value ?? '');
+    document.getElementById('maestro-results').innerHTML = vMaestroResults(modId, q, isNaN(ri) ? -1 : ri);
+}
+
+function vMaestroResults(modId, q, rubroIdx) {
+    const tc    = cfg.usdArs || 1250;
+    const rubros = (rubroIdx >= 0) ? [master.rubros[rubroIdx]] : master.rubros;
+    const rows  = [];
+
+    for (const rubro of rubros) {
+        let items = rubro.items;
+        if (q) items = items.filter(it => it.desc.toLowerCase().includes(q) || it.cod.toLowerCase().includes(q));
+        if (!items.length) continue;
+
+        rows.push(`<div style="padding:5px 24px 3px;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#aaa;background:#fafafa;border-bottom:1px solid #f0f0f0">${esc(rubro.nombre)}</div>`);
+
+        for (const item of items) {
+            const usd = item.precioARS / tc;
+            const codEsc  = esc(item.cod);
+            const descEsc = esc(item.desc);
+            const unitEsc = esc(item.unit);
+            rows.push(`
+            <div onclick="selectMaestroItem('${modId}','${codEsc}','${descEsc}','${unitEsc}',${item.precioARS})"
+                style="padding:9px 24px;cursor:pointer;border-bottom:1px solid #f5f5f5;display:grid;grid-template-columns:80px 1fr 60px 110px 100px;gap:10px;align-items:center;transition:background .1s"
+                onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background=''">
+                <div style="font-family:monospace;font-size:12px;font-weight:700;color:#6366f1">${codEsc}</div>
+                <div style="font-size:13px;font-weight:500;color:#111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${descEsc}">${descEsc}</div>
+                <div style="font-size:13px;color:#777;text-align:center">${unitEsc}</div>
+                <div style="font-size:13px;color:#555;text-align:right">$ ${item.precioARS.toLocaleString('es-AR',{maximumFractionDigits:0})}</div>
+                <div style="font-size:13px;font-weight:700;color:#2563eb;text-align:right">${fUSD(usd)}</div>
+            </div>`);
+        }
+    }
+
+    if (!rows.length) {
+        return `<div style="padding:48px;text-align:center;color:#bbb;font-size:14px">
+            ${q ? `Sin resultados para "<strong>${esc(q)}</strong>"` : 'Sin ítems en este rubro'}
+        </div>`;
+    }
+    return rows.join('');
+}
+
+function selectMaestroItem(modId, cod, desc, unit, precioARS) {
+    const tc       = cfg.usdArs || 1250;
+    const priceUSD = Math.round((precioARS / tc) * 100) / 100;
+
+    modExpand[modId] = true;
+    const body  = document.getElementById(`mb-${modId}`);
+    const arrow = document.querySelector(`#mr-${modId} .mod-arrow`);
+    if (body)  body.classList.add('open');
+    if (arrow) arrow.classList.add('open');
+
+    const item = {
+        id:          uid(),
+        cod,
+        desc,
+        qty:         1,
+        unit,
+        priceMat:    priceUSD,
+        priceMO:     0,
+        fromMaster:  master.version
+    };
+
+    sesItems[modId] = sesItems[modId] || [];
+    sesItems[modId].push(item);
+
+    const tbody = document.getElementById(`it-${modId}`);
+    const ph    = document.getElementById(`ph-${modId}`);
+    if (ph)    ph.remove();
+    if (tbody) tbody.insertAdjacentHTML('beforeend', vItemRow(modId, item));
+
+    refreshModRow(modId);
+    calcEst();
+    closeMaestroModal();
+}
+
+// ── Variante para vista detalle (guarda directo en plist) ──
+function openMaestroModalDet(presupId, modId) {
+    if (!master || !master.rubros || !master.rubros.length) {
+        alert('No hay maestro cargado. Cargá el archivo en Configuración → Maestro de Precios.');
+        return;
+    }
+
+    const html = `
+    <div id="maestro-overlay" onclick="if(event.target.id==='maestro-overlay')closeMaestroModal()"
+        style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px">
+        <div style="background:#fff;border-radius:12px;width:800px;max-width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 48px rgba(0,0,0,.25)">
+            <div style="padding:18px 24px;border-bottom:1.5px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+                <div>
+                    <div style="font-size:18px;font-weight:700">📋 Maestro de Precios</div>
+                    <div style="font-size:12px;color:#888;margin-top:2px">${esc(master.version)} · ${master.totalItems} ítems · TC $${(cfg.usdArs||1250).toLocaleString('es-AR')}/USD</div>
+                </div>
+                <button onclick="closeMaestroModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#aaa;padding:4px;line-height:1">✕</button>
+            </div>
+            <div style="padding:12px 24px;border-bottom:1px solid #f0f0f0;flex-shrink:0;display:flex;gap:10px">
+                <input id="maestro-search" type="text" placeholder="Buscar por descripción o código…"
+                    style="flex:1;padding:9px 14px;border:1.5px solid #d0d0d0;border-radius:8px;font-size:14px;font-family:inherit"
+                    oninput="renderMaestroResultsDet('${presupId}','${modId}')">
+                <select id="maestro-rubro-filter" onchange="renderMaestroResultsDet('${presupId}','${modId}')"
+                    style="padding:9px 14px;border:1.5px solid #d0d0d0;border-radius:8px;font-size:14px;font-family:inherit;background:#fff;max-width:220px">
+                    <option value="">Todos los rubros</option>
+                    ${master.rubros.map((r,i) => `<option value="${i}">${esc(r.nombre)}</option>`).join('')}
+                </select>
+            </div>
+            <div style="padding:6px 24px;background:#f8f9fa;border-bottom:1px solid #ebebeb;flex-shrink:0;display:grid;grid-template-columns:80px 1fr 60px 110px 100px;gap:10px;font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#aaa">
+                <span>Código</span><span>Descripción</span><span style="text-align:center">Un.</span><span style="text-align:right">Precio ARS</span><span style="text-align:right">Precio USD</span>
+            </div>
+            <div id="maestro-results" style="overflow-y:auto;flex:1">
+                ${vMaestroResultsDet(presupId, modId, '', -1)}
+            </div>
+        </div>
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', html);
+    setTimeout(() => document.getElementById('maestro-search')?.focus(), 60);
+}
+
+function renderMaestroResultsDet(presupId, modId) {
+    const q  = (document.getElementById('maestro-search')?.value  || '').toLowerCase().trim();
+    const ri = parseInt(document.getElementById('maestro-rubro-filter')?.value ?? '');
+    document.getElementById('maestro-results').innerHTML = vMaestroResultsDet(presupId, modId, q, isNaN(ri) ? -1 : ri);
+}
+
+function vMaestroResultsDet(presupId, modId, q, rubroIdx) {
+    const tc     = cfg.usdArs || 1250;
+    const rubros = (rubroIdx >= 0) ? [master.rubros[rubroIdx]] : master.rubros;
+    const rows   = [];
+
+    for (const rubro of rubros) {
+        let items = rubro.items;
+        if (q) items = items.filter(it => it.desc.toLowerCase().includes(q) || it.cod.toLowerCase().includes(q));
+        if (!items.length) continue;
+        rows.push(`<div style="padding:5px 24px 3px;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#aaa;background:#fafafa;border-bottom:1px solid #f0f0f0">${esc(rubro.nombre)}</div>`);
+        for (const item of items) {
+            const usd = item.precioARS / tc;
+            const codEsc = esc(item.cod); const descEsc = esc(item.desc); const unitEsc = esc(item.unit);
+            rows.push(`
+            <div onclick="selectMaestroItemDet('${presupId}','${modId}','${codEsc}','${descEsc}','${unitEsc}',${item.precioARS})"
+                style="padding:9px 24px;cursor:pointer;border-bottom:1px solid #f5f5f5;display:grid;grid-template-columns:80px 1fr 60px 110px 100px;gap:10px;align-items:center;transition:background .1s"
+                onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background=''">
+                <div style="font-family:monospace;font-size:12px;font-weight:700;color:#6366f1">${codEsc}</div>
+                <div style="font-size:13px;font-weight:500;color:#111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${descEsc}">${descEsc}</div>
+                <div style="font-size:13px;color:#777;text-align:center">${unitEsc}</div>
+                <div style="font-size:13px;color:#555;text-align:right">$ ${item.precioARS.toLocaleString('es-AR',{maximumFractionDigits:0})}</div>
+                <div style="font-size:13px;font-weight:700;color:#2563eb;text-align:right">${fUSD(usd)}</div>
+            </div>`);
+        }
+    }
+    if (!rows.length) return `<div style="padding:48px;text-align:center;color:#bbb;font-size:14px">${q ? `Sin resultados para "<strong>${esc(q)}</strong>"` : 'Sin ítems'}</div>`;
+    return rows.join('');
+}
+
+function selectMaestroItemDet(presupId, modId, cod, desc, unit, precioARS) {
+    const pi  = plist.findIndex(p => p.id === presupId);
+    if (pi < 0) { closeMaestroModal(); return; }
+    const p   = plist[pi];
+    const tc  = p.usdArs || cfg.usdArs || 1250;
+    const isARS = (p.moneda||'USD') === 'ARS';
+    const price = isARS ? precioARS : Math.round((precioARS / tc) * 100) / 100;
+
+    const newItem = {
+        id:         Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+        cod,
+        desc,
+        qty:        1,
+        unit,
+        priceMat:   price,
+        priceMO:    0,
+        fromMaster: master.version
+    };
+
+    const mod = (p.modules||[]).find(m => m.id === modId);
+    if (!mod) { closeMaestroModal(); return; }
+    mod.items = mod.items || [];
+    mod.items.push(newItem);
+    mod.sub = mod.items.reduce((s,it) => s + (parseFloat(it.qty)||0)*((parseFloat(it.priceMat??it.priceUSD??0)||0)+(parseFloat(it.priceMO)||0)), 0);
+    _recalcPresupTotals(pi);
+    saveDB();
+
+    // Render new row
+    const tbody = document.querySelector(`#dmi-tbody-${modId}`);
+    if (tbody) {
+        const ri = mod.items.length - 1;
+        tbody.insertAdjacentHTML('beforeend', vDetItemRow(newItem, ri, modId, p));
+    }
+    const totEl = document.getElementById('dm-tot-' + modId);
+    if (totEl) totEl.innerHTML = `<div class="det-mod-usd">${fPriP(mod.sub,p)}</div><div class="det-mod-ars">${fSecP(mod.sub,p)}</div>`;
+    updateResultPanel(presupId);
+    closeMaestroModal();
+    toast('✓ Ítem del maestro agregado');
 }
 
 // ═══════════════════════════════════════════════════
