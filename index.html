@@ -3603,17 +3603,20 @@ function vDetItemRow(i, ri, modId, presup) {
     const iSt  = 'width:100%;border:none;background:transparent;font-size:14px;padding:2px 4px;border-radius:3px;outline:none;box-sizing:border-box';
     const focOn  = "this.closest('td').style.background='#fffde7'";
     const focOff = "this.closest('td').style.background=''";
+    const pmFmt  = fmtD(pm);
+    const pmoFmt = fmtD(pmo);
     return `<tr id="dmi-row-${i.id}" style="${ri%2===1?'background:#fafafa':''}">
         <td style="padding:4px 12px 4px;border-bottom:1px solid #efefef">
             <input data-field="desc" value="${esc(i.desc||'')}" placeholder="Descripción…"
                 style="${iSt};color:#222;min-width:100px"
                 onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','desc',this.value)">
             ${i.fromMaster ? `<div style="font-size:10px;color:#6366f1;font-weight:600;margin-top:2px;padding-left:4px">📋 ${esc(i.fromMaster)}</div>` : ''}
+            ${i._maestroDesc ? `<div class="maestro-item-desc" style="font-size:10px;color:#6366f1;margin-top:1px;padding-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(i._maestroDesc)}">📋 ${esc(i._maestroDesc)}</div>` : `<div class="maestro-item-desc" style="display:none;font-size:10px;color:#6366f1;margin-top:1px;padding-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>`}
             <div class="maestro-btn-wrap" style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">
                 <button onclick="openMaestroModalForItem('${pid}','${modId}','${i.id}')"
                     style="background:#eff6ff;border:1px solid #bfdbfe;color:#2563eb;font-size:11px;padding:2px 9px;border-radius:5px;cursor:pointer;white-space:nowrap;flex-shrink:0;font-weight:600;line-height:1.6"
                     onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">📋 Buscar en maestro</button>
-                ${i._maestroCod ? `<span style="font-size:10px;color:#6366f1;font-weight:700;white-space:nowrap">✓ ${esc(i._maestroCod)}</span>` : ''}
+                ${i._maestroCod ? `<span class="maestro-cod-badge" style="font-size:10px;color:#6366f1;font-weight:700;white-space:nowrap">✓ ${esc(i._maestroCod)}</span>` : `<span class="maestro-cod-badge" style="display:none;font-size:10px;color:#6366f1;font-weight:700;white-space:nowrap"></span>`}
                 <input data-field="comentario" value="${esc(i.comentario||'')}" placeholder="Comentario…"
                     style="${iSt};font-size:11px;color:#888;font-style:italic;min-width:80px;flex:1"
                     onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','comentario',this.value)">
@@ -3631,15 +3634,15 @@ function vDetItemRow(i, ri, modId, presup) {
                 onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','unit',this.value)">
         </td>
         <td style="padding:6px 8px;border-bottom:1px solid #efefef;text-align:right;white-space:nowrap">
-            <span style="font-size:11px;color:#999;margin-right:1px">${sym}</span><input type="number" data-field="pricemat" value="${pm||0}" min="0" step="any"
-                style="${iSt};width:88px;text-align:right" title="Precio materiales"
-                onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','priceMat',this.value)"
+            <span style="font-size:13px;color:#555;margin-right:1px;font-weight:500">${sym}</span><input type="text" data-field="pricemat" value="${pmFmt}"
+                style="${iSt};width:100px;text-align:right;font-weight:500;color:#111" title="Precio materiales"
+                onfocus="${focOn};this.select()" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','priceMat',this.value)"
                 oninput="liveSubDet('${i.id}','${pid}')">
         </td>
         <td style="padding:6px 8px;border-bottom:1px solid #efefef;text-align:right;white-space:nowrap">
-            <span style="font-size:11px;color:#999;margin-right:1px">${sym}</span><input type="number" data-field="pricemo" value="${pmo||0}" min="0" step="any"
-                style="${iSt};width:88px;text-align:right" title="Mano de obra"
-                onfocus="${focOn}" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','priceMO',this.value)"
+            <span style="font-size:13px;color:#555;margin-right:1px;font-weight:500">${sym}</span><input type="text" data-field="pricemo" value="${pmoFmt}"
+                style="${iSt};width:100px;text-align:right;font-weight:500;color:#111" title="Mano de obra"
+                onfocus="${focOn};this.select()" onblur="${focOff};saveDetItem('${pid}','${modId}','${i.id}','priceMO',this.value)"
                 oninput="liveSubDet('${i.id}','${pid}')">
         </td>
         <td id="dmi-sub-${i.id}" style="padding:6px 12px;border-bottom:1px solid #efefef;text-align:right;font-weight:700;color:#111;font-size:14px;white-space:nowrap">${isARS ? fARS2(sub) : fUSD2(sub)}</td>
@@ -3651,12 +3654,18 @@ function vDetItemRow(i, ri, modId, presup) {
     </tr>`;
 }
 
+// Parsea números en formato argentino "1.234,56" → 1234.56
+function parseFmt(str) {
+    if (str === '' || str == null) return 0;
+    return parseFloat(String(str).replace(/\./g, '').replace(',', '.')) || 0;
+}
+
 function liveSubDet(itemId, presupId) {
     const row = document.getElementById('dmi-row-' + itemId);
     if (!row) return;
-    const qty  = parseFloat(row.querySelector('[data-field="qty"]')?.value)       || 0;
-    const pmat = parseFloat(row.querySelector('[data-field="pricemat"]')?.value)  || 0;
-    const pmo  = parseFloat(row.querySelector('[data-field="pricemo"]')?.value)   || 0;
+    const qty  = parseFloat(row.querySelector('[data-field="qty"]')?.value)      || 0;
+    const pmat = parseFmt(row.querySelector('[data-field="pricemat"]')?.value);
+    const pmo  = parseFmt(row.querySelector('[data-field="pricemo"]')?.value);
     const sub  = qty * (pmat + pmo);
     const subEl = document.getElementById('dmi-sub-' + itemId);
     const p     = plist.find(x => x.id === presupId);
@@ -3670,7 +3679,15 @@ function saveDetItem(presupId, modId, itemId, field, rawVal) {
     if (!mod)  return;
     const item = (mod.items || []).find(it => it.id === itemId);
     if (!item) return;
-    item[field] = (field === 'qty' || field === 'priceMat' || field === 'priceMO') ? (parseFloat(rawVal) || 0) : rawVal;
+    item[field] = (field === 'qty') ? (parseFloat(rawVal) || 0)
+                : (field === 'priceMat' || field === 'priceMO') ? (parseFmt(rawVal) || 0)
+                : rawVal;
+    // Reformat price display after save
+    if (field === 'priceMat' || field === 'priceMO') {
+        const dfKey = field === 'priceMat' ? 'pricemat' : 'pricemo';
+        const inp = document.querySelector(`#dmi-row-${itemId} [data-field="${dfKey}"]`);
+        if (inp && document.activeElement !== inp) inp.value = fmtD(item[field]);
+    }
     // Recalc module sub
     mod.sub = (mod.items||[]).reduce((s,it) => s + (parseFloat(it.qty)||0)*((parseFloat(it.priceMat??it.priceUSD??0)||0)+(parseFloat(it.priceMO)||0)), 0);
     _recalcPresupTotals(pi);
@@ -5390,7 +5407,7 @@ function vMaestroResultsForItem(presupId, modId, itemId, q, rubroIdx) {
             const usd = item.precioARS / tc;
             const codEsc = esc(item.cod); const descEsc = esc(item.desc); const unitEsc = esc(item.unit);
             rows.push(`
-            <div onclick="selectMaestroItemForRow('${presupId}','${modId}','${itemId}','${codEsc}',${item.precioARS})"
+            <div onclick="selectMaestroItemForRow('${presupId}','${modId}','${itemId}','${codEsc}','${descEsc}',${item.precioARS})"
                 style="padding:9px 24px;cursor:pointer;border-bottom:1px solid #f5f5f5;display:grid;grid-template-columns:80px 1fr 60px 110px 100px;gap:10px;align-items:center;transition:background .1s"
                 onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background=''">
                 <div style="font-family:monospace;font-size:12px;font-weight:700;color:#6366f1">${codEsc}</div>
@@ -5405,7 +5422,7 @@ function vMaestroResultsForItem(presupId, modId, itemId, q, rubroIdx) {
     return rows.join('');
 }
 
-function selectMaestroItemForRow(presupId, modId, itemId, cod, precioARS) {
+function selectMaestroItemForRow(presupId, modId, itemId, cod, desc, precioARS) {
     const pi = plist.findIndex(p => p.id === presupId);
     if (pi < 0) { closeMaestroModal(); return; }
     const p  = plist[pi];
@@ -5418,30 +5435,28 @@ function selectMaestroItemForRow(presupId, modId, itemId, cod, precioARS) {
     const item = (mod.items||[]).find(it => it.id === itemId);
     if (!item) { closeMaestroModal(); return; }
 
-    // Aplica precio a la fila existente del cliente; _maestroCod es solo UI
-    item.priceMat   = price;
+    // Aplica precio a la fila existente del cliente; _maestroCod/_maestroDesc son solo UI
+    item.priceMat    = price;
     item._maestroCod = cod;
+    item._maestroDesc = desc;
     mod.sub = (mod.items||[]).reduce((s,it) => s + (parseFloat(it.qty)||0)*((parseFloat(it.priceMat??it.priceUSD??0)||0)+(parseFloat(it.priceMO)||0)), 0);
     _recalcPresupTotals(pi);
     saveDB();
 
-    // Actualiza UI: campo priceMat + badge
+    // Actualiza UI: campo priceMat + badge código + descripción maestro
     const row = document.getElementById('dmi-row-' + itemId);
     if (row) {
         const priceMatInput = row.querySelector('[data-field="pricemat"]');
-        if (priceMatInput) { priceMatInput.value = price; }
+        if (priceMatInput) priceMatInput.value = fmtD(price);
         liveSubDet(itemId, presupId);
-        const wrap = row.querySelector('.maestro-btn-wrap');
-        if (wrap) {
-            let badge = wrap.querySelector('.maestro-cod-badge');
-            if (!badge) {
-                badge = document.createElement('span');
-                badge.className = 'maestro-cod-badge';
-                badge.style.cssText = 'font-size:10px;color:#6366f1;font-weight:700;white-space:nowrap';
-                wrap.insertBefore(badge, wrap.children[1] || null);
-            }
-            badge.textContent = '✓ ' + cod;
-        }
+
+        // Badge código
+        let badge = row.querySelector('.maestro-cod-badge');
+        if (badge) { badge.textContent = '✓ ' + cod; badge.style.display = ''; }
+
+        // Descripción del ítem maestro
+        let descDiv = row.querySelector('.maestro-item-desc');
+        if (descDiv) { descDiv.textContent = '📋 ' + desc; descDiv.title = desc; descDiv.style.display = ''; }
     }
     const totEl = document.getElementById('dm-tot-' + modId);
     if (totEl) totEl.innerHTML = `<div class="det-mod-usd">${fPriP(mod.sub,p)}</div><div class="det-mod-ars">${fSecP(mod.sub,p)}</div>`;
