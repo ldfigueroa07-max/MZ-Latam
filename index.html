@@ -5101,9 +5101,11 @@ async function importMaestroXlsx(input) {
             const desc = descRaw.trim();
             const unit = unitRaw ? String(unitRaw).trim() : '';
 
-            // Ítem: tiene código que contiene un punto y al menos un dígito (P.01, 18.1, C.01, P.01.02, etc.)
-            // NO requiere unidad — algunos rubros del Excel no la tienen en la columna E
-            const isItem = cod && cod.includes('.') && /\d/.test(cod) && cod.length < 20;
+            // Ítem: tiene código con punto (1.1, C.01, R.02) O tiene unidad (m², ml, kg, etc.)
+            // TABIQUES y PINTURA no tienen código pero sí tienen unidad en columna E
+            const hasCode = cod && cod.includes('.') && /\d/.test(cod) && cod.length < 20;
+            const hasUnit = unit.length > 0;
+            const isItem = hasCode || hasUnit;
 
             if (!isItem) {
                 // Fila de rubro/sección
