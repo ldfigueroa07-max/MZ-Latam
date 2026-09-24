@@ -5144,6 +5144,12 @@ async function importMaestroXlsx(input) {
         // Filtrar rubros vacíos
         const filteredRubros = rubros.filter(r => r.items.length > 0);
 
+        // DEBUG: mostrar todos los rubros detectados (incluyendo vacíos)
+        const debugInfo = `FILAS TOTALES: ${raw.length}\nRUBROS DETECTADOS (${rubros.length} total, ${filteredRubros.length} con ítems):\n` +
+            rubros.map(r => `  • ${r.nombre} → ${r.items.length} ítems`).join('\n');
+        console.log('[MZ-DEBUG importMaestro]\n' + debugInfo);
+        alert('[DEBUG importMaestro]\n' + debugInfo);
+
         if (!totalItems) { alert('No se encontraron ítems con precios en el archivo. Verificá que sea el archivo RENDIMIENTO MATERIALES correcto.'); input.value = ''; return; }
 
         master = {
