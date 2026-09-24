@@ -5116,41 +5116,33 @@ async function importMaestroXlsx(input) {
 
             if (!currentRubro) { currentRubro = { nombre: 'General', items: [] }; rubros.push(currentRubro); }
 
-            // Obtener precio ARS: usar colPrecio detectado, o buscar en últimas 6 columnas el mayor valor
+            // Obtener precio ARS: usar colPrecio detectado, o escanear TODAS las columnas numéricas
             let precioARS = 0;
             if (colPrecio >= 0 && colPrecio < row.length) {
                 precioARS = parseFloat(row[colPrecio]) || 0;
             }
-            if (!precioARS || precioARS < 1) {
-                // Fallback: escanear últimas 6 columnas buscando el mayor valor numérico > 100
-                const end = row.length;
-                for (let ci = end - 6; ci < end; ci++) {
+            if (!precioARS) {
+                // Fallback: escanear todas las columnas buscando el mayor valor numérico > 0
+                for (let ci = 0; ci < row.length; ci++) {
                     const v = parseFloat(row[ci]);
-                    if (v > 100 && v > precioARS) precioARS = v;
+                    if (v > 0 && v > precioARS && ci !== 3) precioARS = v; // skip col D (qty)
                 }
             }
 
-            if (precioARS > 0) {
-                currentRubro.items.push({
-                    cod,
-                    desc,
-                    unit,
-                    precioARS: Math.round(precioARS * 100) / 100
-                });
-                totalItems++;
-            }
+            // Siempre agregar el ítem (aunque precio sea 0) para no perder ninguna sección
+            currentRubro.items.push({
+                cod,
+                desc,
+                unit,
+                precioARS: Math.round(precioARS * 100) / 100
+            });
+            totalItems++;
         }
 
-        // Filtrar rubros vacíos
+        // Filtrar rubros vacíos (sin ningún ítem)
         const filteredRubros = rubros.filter(r => r.items.length > 0);
 
-        // DEBUG: mostrar todos los rubros detectados (incluyendo vacíos)
-        const debugInfo = `FILAS TOTALES: ${raw.length}\nRUBROS DETECTADOS (${rubros.length} total, ${filteredRubros.length} con ítems):\n` +
-            rubros.map(r => `  • ${r.nombre} → ${r.items.length} ítems`).join('\n');
-        console.log('[MZ-DEBUG importMaestro]\n' + debugInfo);
-        alert('[DEBUG importMaestro]\n' + debugInfo);
-
-        if (!totalItems) { alert('No se encontraron ítems con precios en el archivo. Verificá que sea el archivo RENDIMIENTO MATERIALES correcto.'); input.value = ''; return; }
+        if (!totalItems) { alert('No se encontraron ítems en el archivo. Verificá que sea el archivo RENDIMIENTO MATERIALES correcto.'); input.value = ''; return; }
 
         master = {
             version,
