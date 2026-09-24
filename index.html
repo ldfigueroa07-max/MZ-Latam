@@ -5101,8 +5101,8 @@ async function importMaestroXlsx(input) {
             const desc = descRaw.trim();
             const unit = unitRaw ? String(unitRaw).trim() : '';
 
-            // Ítem: tiene código con punto decimal o letra+punto (1.1, C.01, R.02)
-            const isItem = unit && cod && /^\d+\.\d+$|^[A-Za-z]\.\d+$/.test(cod);
+            // Ítem: tiene código con punto (1.1, C.01, R.02, P.01.02, 14.1.02, etc.)
+            const isItem = unit && cod && cod.includes('.') && /\d/.test(cod);
 
             if (!isItem) {
                 // Fila de rubro/sección (sin unidad o sin código decimal)
