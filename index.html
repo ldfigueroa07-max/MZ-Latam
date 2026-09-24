@@ -889,6 +889,8 @@ if (!localStorage.getItem('mz_dash_hist') && SEED_DATA.dashHist) {
 }
 const _storedPlist = JSON.parse(localStorage.getItem(DB));
 let plist     = (_storedPlist && _storedPlist.length > 0) ? _storedPlist : (SEED_DATA.presupuestos || []);
+// Asegurar costoUSD/costoARS en presupuestos existentes
+plist.forEach((p, pi) => { if (p.costoUSD === undefined) { const tc=p.usdArs||cfg.usdArs||1; const isARS=(p.moneda||'USD')==='ARS'; const base=(p.modules||[]).reduce((s,m)=>s+(m.sub||0),0); p.costoUSD=isARS?base/tc:base; p.costoARS=isARS?base:base*tc; } });
 let users     = JSON.parse(localStorage.getItem(USERS_DB))  || JSON.parse(JSON.stringify(DEFAULT_USERS));
 let suppliers = JSON.parse(localStorage.getItem(SUPPLIERS_DB)) || [];
 let master    = JSON.parse(localStorage.getItem(MASTER_DB))    || null;
@@ -3391,21 +3393,37 @@ function vDetalle(id) {
 
         <!-- RIGHT sticky -->
         <div class="page-grid-sticky">
-            <div class="result-panel">
-                <div class="r-lbl">${(p.moneda||'USD')==='ARS' ? 'Total en Pesos Argentinos' : 'Total Estimado'}</div>
-                <div class="r-val">${fPriP(priAmtP(p), p)}</div>
-                <div class="r-range">Rango: ${fPriP(loAmtP(p), p)} — ${fPriP(hiAmtP(p), p)}</div>
-                <hr class="r-div">
-                <div class="r-ars">
-                    <div class="r-ars-lbl">${(p.moneda||'USD')==='ARS' ? 'Equivalente en Dólares' : 'En Pesos Argentinos'}</div>
-                    <div class="r-ars-val">${fSecP(priAmtP(p), p)}</div>
-                    <div class="r-ars-range">${fSecP(loAmtP(p), p)} — ${fSecP(hiAmtP(p), p)}</div>
+            <div class="result-panel" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+
+                <!-- PRECIO COSTO — naranja -->
+                <div style="background:#fff3e0;border:2px solid #f97316;border-radius:10px;padding:14px 16px">
+                    <div style="font-size:12px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#9a3412;margin-bottom:6px">💰 Precio Costo</div>
+                    <div id="rp-costo-pri" style="font-size:28px;font-weight:900;color:#c2410c;letter-spacing:-.5px;line-height:1.1">${(()=>{const cP=(p.moneda||'USD')==='ARS'?(p.costoARS||0):(p.costoUSD||0);return fPriP(cP,p);})()}</div>
+                    <div id="rp-costo-sec" style="font-size:14px;color:#ea580c;font-weight:700;margin-top:4px">${(()=>{const cP=(p.moneda||'USD')==='ARS'?(p.costoARS||0):(p.costoUSD||0);return fSecP(cP,p);})()}</div>
+                    <div id="rp-costo-m2" style="font-size:13px;color:#9a3412;font-weight:700;margin-top:8px;padding-top:8px;border-top:1.5px solid #f97316">${(()=>{const cP=(p.moneda||'USD')==='ARS'?(p.costoARS||0):(p.costoUSD||0);const m2=parseFloat(p.metros||p.m2||0);return m2>0?fPriP(cP/m2,p)+' / m²':'— sin m² cargados';})()}</div>
                 </div>
-                <hr class="r-div">
-                <div class="r-note">
-                    Margen ±<strong>${p.margen||cfg.margen}%</strong><br>
-                    <span style="color:#b45309">TC: 1 USD = ARS ${fmt(p.usdArs||cfg.usdArs)}</span>
+
+                <!-- PRECIO VENTA — verde -->
+                <div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:10px;padding:14px 16px">
+                    <div style="font-size:12px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#166534;margin-bottom:6px">🏷️ Precio Venta</div>
+                    <div id="rp-venta-pri" style="font-size:28px;font-weight:900;color:#15803d;letter-spacing:-.5px;line-height:1.1">${fPriP(priAmtP(p),p)}</div>
+                    <div id="rp-venta-sec" style="font-size:14px;color:#16a34a;font-weight:700;margin-top:4px">${fSecP(priAmtP(p),p)}</div>
+                    <div id="rp-venta-m2" style="font-size:13px;color:#166534;font-weight:700;margin-top:8px;padding-top:8px;border-top:1.5px solid #22c55e">${(()=>{const m2=parseFloat(p.metros||p.m2||0);return m2>0?fPriP(priAmtP(p)/m2,p)+' / m²':'— sin m² cargados';})()}</div>
                 </div>
+
+                <!-- MARGEN — celeste -->
+                <div style="background:#eff6ff;border:2px solid #3b82f6;border-radius:10px;padding:14px 16px">
+                    <div style="font-size:12px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#1e40af;margin-bottom:10px">📐 Margen aplicado</div>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <input id="rp-margen-inp" type="number" min="0" max="300" step="0.5" value="${p.margen||cfg.margen}"
+                            style="width:80px;font-size:26px;font-weight:900;color:#1d4ed8;border:2px solid #93c5fd;border-radius:8px;padding:4px 8px;text-align:center;background:#fff;outline:none;box-sizing:border-box"
+                            oninput="updatePanelMargen('${id}',this.value)"
+                            onblur="applyPanelMargen('${id}',this.value)">
+                        <span style="font-size:26px;font-weight:900;color:#1d4ed8">%</span>
+                    </div>
+                    <div style="font-size:13px;color:#1d4ed8;font-weight:700;margin-top:8px">TC: 1 USD = ARS ${fmt(p.usdArs||cfg.usdArs)}</div>
+                </div>
+
             </div>
             <div class="card">
                 <div class="card-bd" style="display:flex;flex-direction:column;gap:7px">
@@ -3742,6 +3760,9 @@ function _recalcPresupTotals(pi) {
     const base   = (p.modules||[]).reduce((s,m) => s + (m.sub||0), 0);
     const baseUSD = isARS ? base/tc : base;
     const baseARS = isARS ? base    : base*tc;
+    // Precio Costo (sin margen)
+    p.costoUSD   = baseUSD;
+    p.costoARS   = baseARS;
     // totalUSD/ARS = precio al cliente (base + MG%)
     p.totalUSD   = baseUSD * (1 + mg);
     p.totalARS   = baseARS * (1 + mg);
@@ -3753,11 +3774,48 @@ function _recalcPresupTotals(pi) {
 function updateResultPanel(presupId) {
     const p = plist.find(x => x.id === presupId);
     if (!p) return;
-    const q = sel => document.querySelector(sel);
-    const rVal = q('.r-val');          if (rVal)      rVal.textContent      = fPriP(priAmtP(p), p);
-    const rRng = q('.r-range');        if (rRng)      rRng.textContent      = `Rango: ${fPriP(loAmtP(p),p)} — ${fPriP(hiAmtP(p),p)}`;
-    const rAV  = q('.r-ars-val');      if (rAV)       rAV.textContent       = fSecP(priAmtP(p), p);
-    const rAR  = q('.r-ars-range');    if (rAR)       rAR.textContent       = `${fSecP(loAmtP(p),p)} — ${fSecP(hiAmtP(p),p)}`;
+    const isARS = (p.moneda||'USD') === 'ARS';
+    const m2    = parseFloat(p.metros || p.m2 || 0);
+    const costoPri  = isARS ? (p.costoARS||0) : (p.costoUSD||0);
+    const ventaPri  = priAmtP(p);
+
+    const e = id => document.getElementById(id);
+    if (e('rp-costo-pri')) e('rp-costo-pri').textContent = fPriP(costoPri, p);
+    if (e('rp-costo-sec')) e('rp-costo-sec').textContent = fSecP(costoPri, p);
+    if (e('rp-costo-m2'))  e('rp-costo-m2').textContent  = m2 > 0 ? fPriP(costoPri/m2, p) + ' / m²' : '— sin m² cargados';
+    if (e('rp-venta-pri')) e('rp-venta-pri').textContent = fPriP(ventaPri, p);
+    if (e('rp-venta-sec')) e('rp-venta-sec').textContent = fSecP(ventaPri, p);
+    if (e('rp-venta-m2'))  e('rp-venta-m2').textContent  = m2 > 0 ? fPriP(ventaPri/m2, p) + ' / m²' : '— sin m² cargados';
+    if (e('rp-margen-inp') && document.activeElement !== e('rp-margen-inp'))
+        e('rp-margen-inp').value = p.margen ?? cfg.margen;
+}
+
+// Actualización en tiempo real del margen (sin guardar)
+function updatePanelMargen(presupId, mgVal) {
+    const p = plist.find(x => x.id === presupId);
+    if (!p) return;
+    const mg    = (parseFloat(mgVal) || 0) / 100;
+    const isARS = (p.moneda||'USD') === 'ARS';
+    const m2    = parseFloat(p.metros || p.m2 || 0);
+    const costoPri = isARS ? (p.costoARS||0) : (p.costoUSD||0);
+    const ventaPri = costoPri * (1 + mg);
+    const e = id => document.getElementById(id);
+    if (e('rp-venta-pri')) e('rp-venta-pri').textContent = fPriP(ventaPri, p);
+    if (e('rp-venta-sec')) e('rp-venta-sec').textContent = fSecP(ventaPri, p);
+    if (e('rp-venta-m2'))  e('rp-venta-m2').textContent  = m2 > 0 ? fPriP(ventaPri/m2, p) + ' / m²' : '— sin m² cargados';
+}
+
+// Guarda el margen y recalcula totales al salir del campo
+function applyPanelMargen(presupId, mgVal) {
+    const pi = plist.findIndex(x => x.id === presupId);
+    if (pi < 0) return;
+    const mg = parseFloat(mgVal);
+    if (isNaN(mg) || mg < 0) return;
+    plist[pi].margen = mg;
+    _recalcPresupTotals(pi);
+    saveDB();
+    updateResultPanel(presupId);
+    toast(`✓ Margen actualizado a ${mg}%`);
 }
 
 
