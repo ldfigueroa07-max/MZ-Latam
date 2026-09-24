@@ -5069,14 +5069,19 @@ async function importMaestroXlsx(input) {
             if (version !== 'SIN FECHA') break;
         }
 
-        // ── Detectar columna "precio unitario" escaneando primeras filas ──
+        // ── Detectar columna "precio unitario" y columna "unidad" escaneando primeras filas ──
         let colPrecio = -1;
+        let colUnidad = 4; // default columna E
+        const UNIT_RE = /^(m[²2³3]?|ml|m\.l\.|kg|gl|lts?|l|tn|un|c\/u|jor|hr|pza|m3|m2)$/i;
         for (let r = 0; r < Math.min(10, raw.length); r++) {
             const row = raw[r] || [];
             for (let c = 0; c < row.length; c++) {
                 const cell = typeof row[c] === 'string' ? row[c].toLowerCase().trim() : '';
                 if (cell.includes('precio unitario') || cell === 'p.u.' || cell === 'precio u') {
-                    colPrecio = c; break;
+                    colPrecio = c;
+                }
+                if (cell === 'unidad' || cell === 'un.' || cell === 'un') {
+                    colUnidad = c;
                 }
             }
             if (colPrecio >= 0) break;
@@ -5093,18 +5098,24 @@ async function importMaestroXlsx(input) {
 
             const codRaw  = row[1];
             const descRaw = row[2];
-            const unitRaw = row[4];
 
             if (!descRaw || typeof descRaw !== 'string' || !descRaw.trim()) continue;
 
             const cod  = codRaw !== null && codRaw !== undefined ? String(codRaw).trim() : '';
             const desc = descRaw.trim();
-            const unit = unitRaw ? String(unitRaw).trim() : '';
 
-            // Ítem: tiene código con punto (1.1, C.01, R.02) O tiene unidad (m², ml, kg, etc.)
-            // TABIQUES y PINTURA no tienen código pero sí tienen unidad en columna E
+            // Buscar unidad: primero en colUnidad detectada, luego escanear toda la fila
+            let unit = row[colUnidad] ? String(row[colUnidad]).trim() : '';
+            if (!unit || !UNIT_RE.test(unit)) {
+                for (let ci = 0; ci < row.length; ci++) {
+                    const v = row[ci] ? String(row[ci]).trim() : '';
+                    if (UNIT_RE.test(v)) { unit = v; break; }
+                }
+            }
+
+            // Ítem: tiene código con punto (1.1, C.01, R.02) O tiene unidad reconocida (m², ml, kg…)
             const hasCode = cod && cod.includes('.') && /\d/.test(cod) && cod.length < 20;
-            const hasUnit = unit.length > 0;
+            const hasUnit = UNIT_RE.test(unit);
             const isItem = hasCode || hasUnit;
 
             if (!isItem) {
