@@ -6331,6 +6331,21 @@ function showEditInfoModal(presupId) {
                 '<div class="fg" style="grid-column:1/-1"><label class="flabel">Notas internas</label><textarea class="ftextarea" id="eim-notas" rows="3" placeholder="Observaciones, referencias…"></textarea></div>' +
             '</div>' +
         '</div>' +
+        '<div style="padding:0 24px 20px">' +
+            '<div style="border:2px dashed #c7d2fe;border-radius:10px;padding:16px 18px;background:#f8f9ff">' +
+                '<div style="font-size:13px;font-weight:800;color:#4f46e5;letter-spacing:.5px;margin-bottom:6px">📥 IMPORTAR LICITACIÓN DEL CLIENTE</div>' +
+                '<div style="font-size:13px;color:#666;margin-bottom:12px">Cargá un Excel (.xlsx/.xls) o CSV con los ítems del cliente. Se agrupan por rubro y se agregan al presupuesto.</div>' +
+                '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">' +
+                    '<input type="file" id="eim-import-file" accept=".xlsx,.xls,.csv,.txt" style="flex:1;min-width:180px;font-size:14px;color:#444">' +
+                    '<select id="eim-import-mode" class="fselect" style="flex:0 0 180px">' +
+                        '<option value="append">➕ Agregar ítems</option>' +
+                        '<option value="replace">🔄 Reemplazar ítems existentes</option>' +
+                    '</select>' +
+                    '<button id="eim-import-btn" class="btn" style="background:#4f46e5;color:#fff;flex-shrink:0">📥 Importar</button>' +
+                '</div>' +
+                '<div id="eim-import-status" style="font-size:13px;color:#555;min-height:18px"></div>' +
+            '</div>' +
+        '</div>' +
         '<div style="padding:16px 24px;border-top:1px solid #e8e8e8;display:flex;gap:10px;justify-content:flex-end">' +
             '<button id="eim-cancel-btn" class="btn btn-secondary">Cancelar</button>' +
             '<button id="eim-save-btn" class="btn btn-success">💾 Guardar cambios</button>' +
@@ -6370,6 +6385,7 @@ function showEditInfoModal(presupId) {
     document.getElementById('eim-close-btn').onclick  = () => overlay.remove();
     document.getElementById('eim-cancel-btn').onclick = () => overlay.remove();
     document.getElementById('eim-save-btn').onclick   = () => saveEditInfo(presupId);
+    document.getElementById('eim-import-btn').onclick = () => importLicitacionToPresup(presupId);
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
     document.getElementById('eim-cli').focus();
@@ -6413,6 +6429,90 @@ function saveEditInfo(presupId) {
     document.getElementById('eim-overlay').remove();
     toast('✅ Datos actualizados');
     refreshDetalle(presupId);
+}
+
+// ── Importar licitación cliente a presupuesto existente ──────────────────
+async function importLicitacionToPresup(presupId) {
+    const fileInp = document.getElementById('eim-import-file');
+    const mode    = document.getElementById('eim-import-mode')?.value || 'append';
+    const status  = document.getElementById('eim-import-status');
+
+    if (!fileInp?.files?.length) { toast('❌ Seleccioná un archivo primero', 'error'); return; }
+    const file = fileInp.files[0];
+    const ext  = file.name.split('.').pop().toLowerCase();
+
+    status.textContent = '⏳ Leyendo archivo…';
+
+    let rows = [];
+    try {
+        if (ext === 'xlsx' || ext === 'xls') {
+            const parsed = await parseXlsFile(file);
+            rows = parsed.rows;
+        } else {
+            const text   = await file.text();
+            const parsed = await parseTxtFile(new File([text], file.name));
+            rows = parsed.rows;
+        }
+    } catch(e) {
+        status.textContent = '❌ Error al leer el archivo: ' + e.message;
+        return;
+    }
+
+    if (!rows.length) { status.textContent = '❌ No se encontraron ítems en el archivo.'; return; }
+
+    const idx = plist.findIndex(x => x.id === presupId);
+    if (idx < 0) return;
+    const p  = plist[idx];
+    p.modules = p.modules || [];
+
+    const tc    = p.usdArs || cfg.usdArs || 1;
+    const isARS = (p.moneda || 'USD') === 'ARS';
+
+    // Group rows by rubro (if present), else all go to one group
+    const groups = {};
+    rows.forEach(r => {
+        const g = r.rubro?.trim() || '(Sin rubro)';
+        (groups[g] = groups[g] || []).push(r);
+    });
+
+    let totalImported = 0;
+
+    for (const [rubroName, rubroRows] of Object.entries(groups)) {
+        // Find existing module by name (case-insensitive), or create new one
+        let mod = p.modules.find(m => m.name?.toLowerCase() === rubroName.toLowerCase());
+        if (!mod) {
+            mod = { id: uid(), name: rubroName, color: '#6366f1', items: [], sub: 0 };
+            p.modules.push(mod);
+        }
+
+        if (mode === 'replace') mod.items = [];
+
+        rubroRows.forEach(r => {
+            const price = isARS ? r.priceMat : (r.priceMat || 0);
+            mod.items.push({
+                id:       uid(),
+                cod:      r.cod || '',
+                desc:     r.desc,
+                qty:      r.qty || 1,
+                unit:     r.unit || 'un',
+                priceMat: price,
+                priceMO:  r.priceMO || 0,
+                comentario: r.comentario || '',
+            });
+            totalImported++;
+        });
+
+        mod.sub = mod.items.reduce((s, it) =>
+            s + ((parseFloat(it.qty)||0) * ((parseFloat(it.priceMat??0)||0) + (parseFloat(it.priceMO)||0))), 0);
+    }
+
+    // Recalculate totals
+    _recalcPresupTotals(idx);
+    saveDB();
+
+    status.innerHTML = `<span style="color:#16a34a;font-weight:700">✅ ${totalImported} ítems importados en ${Object.keys(groups).length} rubro(s). Guardá los cambios y refrescá la vista.</span>`;
+    toast(`✅ ${totalImported} ítems importados del cliente`);
+    fileInp.value = '';
 }
 
 function showEditContactsModal(presupId) {
