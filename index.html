@@ -5205,7 +5205,7 @@ function openMaestroModal(modId) {
                 </select>
             </div>
             <!-- Cabecera columnas -->
-            <div style="padding:6px 24px;background:#f8f9fa;border-bottom:1px solid #ebebeb;flex-shrink:0;display:grid;grid-template-columns:80px 1fr 60px 110px 100px;gap:10px;font-size:14px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#aaa">
+            <div style="padding:6px 24px;background:#f8f9fa;border-bottom:1px solid #ebebeb;flex-shrink:0;display:grid;grid-template-columns:80px 1fr 60px 110px 100px;gap:10px;font-size:14px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#555">
                 <span>Código</span><span>Descripción</span><span style="text-align:center">Un.</span><span style="text-align:right">Precio ARS</span><span style="text-align:right">Precio USD</span>
             </div>
             <!-- Resultados -->
@@ -5239,7 +5239,7 @@ function vMaestroResults(modId, q, rubroIdx) {
         if (q) items = items.filter(it => it.desc.toLowerCase().includes(q) || it.cod.toLowerCase().includes(q));
         if (!items.length) continue;
 
-        rows.push(`<div style="padding:5px 24px 3px;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#aaa;background:#fafafa;border-bottom:1px solid #f0f0f0">${esc(rubro.nombre)}</div>`);
+        rows.push(`<div style="padding:5px 24px 3px;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#111;background:#fafafa;border-bottom:1px solid #f0f0f0">${esc(rubro.nombre)}</div>`);
 
         for (const item of items) {
             const usd = item.precioARS / tc;
@@ -5329,7 +5329,7 @@ function openMaestroModalDet(presupId, modId) {
                     ${master.rubros.map((r,i) => `<option value="${i}">${esc(r.nombre)}</option>`).join('')}
                 </select>
             </div>
-            <div style="padding:6px 24px;background:#f8f9fa;border-bottom:1px solid #ebebeb;flex-shrink:0;display:grid;grid-template-columns:80px 1fr 60px 110px 100px;gap:10px;font-size:14px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#aaa">
+            <div style="padding:6px 24px;background:#f8f9fa;border-bottom:1px solid #ebebeb;flex-shrink:0;display:grid;grid-template-columns:80px 1fr 60px 110px 100px;gap:10px;font-size:14px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#555">
                 <span>Código</span><span>Descripción</span><span style="text-align:center">Un.</span><span style="text-align:right">Precio ARS</span><span style="text-align:right">Precio USD</span>
             </div>
             <div id="maestro-results" style="overflow-y:auto;flex:1">
@@ -5357,7 +5357,7 @@ function vMaestroResultsDet(presupId, modId, q, rubroIdx) {
         let items = rubro.items;
         if (q) items = items.filter(it => it.desc.toLowerCase().includes(q) || it.cod.toLowerCase().includes(q));
         if (!items.length) continue;
-        rows.push(`<div style="padding:5px 24px 3px;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#aaa;background:#fafafa;border-bottom:1px solid #f0f0f0">${esc(rubro.nombre)}</div>`);
+        rows.push(`<div style="padding:5px 24px 3px;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#111;background:#fafafa;border-bottom:1px solid #f0f0f0">${esc(rubro.nombre)}</div>`);
         for (const item of items) {
             const usd = item.precioARS / tc;
             const codEsc = esc(item.cod); const descEsc = esc(item.desc); const unitEsc = esc(item.unit);
@@ -5445,7 +5445,7 @@ function openMaestroModalForItem(presupId, modId, itemId) {
                     ${master.rubros.map((r,i) => `<option value="${i}">${esc(r.nombre)}</option>`).join('')}
                 </select>
             </div>
-            <div style="padding:6px 24px;background:#f8f9fa;border-bottom:1px solid #ebebeb;flex-shrink:0;display:grid;grid-template-columns:80px 1fr 60px 110px 100px;gap:10px;font-size:14px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#aaa">
+            <div style="padding:6px 24px;background:#f8f9fa;border-bottom:1px solid #ebebeb;flex-shrink:0;display:grid;grid-template-columns:80px 1fr 60px 110px 100px;gap:10px;font-size:14px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#555">
                 <span>Código</span><span>Descripción</span><span style="text-align:center">Un.</span><span style="text-align:right">Precio ARS</span><span style="text-align:right">Precio USD</span>
             </div>
             <div id="maestro-results" style="overflow-y:auto;flex:1">
@@ -5472,7 +5472,7 @@ function vMaestroResultsForItem(presupId, modId, itemId, q, rubroIdx) {
         let items = rubro.items;
         if (q) items = items.filter(it => it.desc.toLowerCase().includes(q) || it.cod.toLowerCase().includes(q));
         if (!items.length) continue;
-        rows.push(`<div style="padding:5px 24px 3px;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#aaa;background:#fafafa;border-bottom:1px solid #f0f0f0">${esc(rubro.nombre)}</div>`);
+        rows.push(`<div style="padding:5px 24px 3px;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#111;background:#fafafa;border-bottom:1px solid #f0f0f0">${esc(rubro.nombre)}</div>`);
         for (const item of items) {
             const usd = item.precioARS / tc;
             const codEsc = esc(item.cod); const descEsc = esc(item.desc); const unitEsc = esc(item.unit);
