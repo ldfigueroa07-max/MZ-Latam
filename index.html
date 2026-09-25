@@ -3416,7 +3416,7 @@ function vDetalle(id) {
                     <div style="font-size:12px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#1e40af;margin-bottom:10px">📐 Margen aplicado</div>
                     <div style="display:flex;align-items:center;gap:8px">
                         <input id="rp-margen-inp" type="number" min="0" max="300" step="0.5" value="${p.margen||cfg.margen}"
-                            style="width:80px;font-size:26px;font-weight:900;color:#1d4ed8;border:2px solid #93c5fd;border-radius:8px;padding:4px 8px;text-align:center;background:#fff;outline:none;box-sizing:border-box"
+                            style="width:120px;font-size:26px;font-weight:900;color:#1d4ed8;border:2px solid #93c5fd;border-radius:8px;padding:4px 8px;text-align:center;background:#fff;outline:none;box-sizing:border-box"
                             oninput="updatePanelMargen('${id}',this.value)"
                             onblur="applyPanelMargen('${id}',this.value)">
                         <span style="font-size:26px;font-weight:900;color:#1d4ed8">%</span>
