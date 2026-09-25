@@ -6618,9 +6618,16 @@ function showAddModProvModal(modId, presupId) {
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9100;display:flex;align-items:center;justify-content:center;padding:20px';
 
     const modal = document.createElement('div');
-    modal.style.cssText = 'background:#fff;border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.22);width:100%;max-width:460px;display:flex;flex-direction:column';
+    modal.style.cssText = 'background:#fff;border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.22);width:100%;max-width:560px;display:flex;flex-direction:column';
 
-    const modObj = cfg.modules.find(m => m.id === modId);
+    // Buscar nombre del módulo: primero en cfg.modules (categorías), luego en presupuestos
+    let modObj = cfg.modules.find(m => m.id === modId);
+    if (!modObj) {
+        for (const p of plist) {
+            const found = (p.modules || []).find(m => m.id === modId);
+            if (found) { modObj = found; break; }
+        }
+    }
     const c = modColor(modId);
 
     // Suppliers not yet assigned to this module
